@@ -260,47 +260,64 @@ motivesRoutes.get('/', async (c) => {
       .where(inArray(motives.id, motiveIds));
   }
 
-  // For each motive, fetch attendees with user info
-  const result = await Promise.all(
-    motiveRows.map(async (motive) => {
-      const memoryCountPromise = (async () => {
-        try {
-          const memoryRow = await db
-            .select({ total: sql<number>`COALESCE(SUM(array_length(${motiveMemories.storagePaths}, 1)), 0)` })
-            .from(motiveMemories)
-            .where(eq(motiveMemories.motiveId, motive.id));
-          return Number(memoryRow[0]?.total ?? 0);
-        } catch (err: any) {
-          const code = err?.cause?.code ?? err?.code;
-          if (code !== '42703') throw err;
+  if (motiveRows.length === 0) return c.json({ motives: [] });
 
-          // Backward compatibility: older DBs still have photo_urls but not storage_paths.
-          const legacyRow = await db
-            .select({ total: sql<number>`COALESCE(SUM(array_length(${motiveMemories.photoUrls}, 1)), 0)` })
-            .from(motiveMemories)
-            .where(eq(motiveMemories.motiveId, motive.id));
-          return Number(legacyRow[0]?.total ?? 0);
-        }
-      })();
+  const filteredMotiveIds = motiveRows.map((m) => m.id);
 
-      const [attendees, memoryCount] = await Promise.all([
-        db
-          .select({
-            userId: users.id,
-            name: users.name,
-            image: users.image,
-            rsvpStatus: motiveAttendees.rsvpStatus,
-            role: motiveAttendees.role,
-          })
-          .from(motiveAttendees)
-          .innerJoin(users, eq(users.id, motiveAttendees.userId))
-          .where(eq(motiveAttendees.motiveId, motive.id)),
-        memoryCountPromise,
-      ]);
-
-      return { ...motive, attendees, memoryCount };
+  // Bulk fetch attendees for all motives in one query
+  const allAttendeeRows = await db
+    .select({
+      motiveId: motiveAttendees.motiveId,
+      userId: users.id,
+      name: users.name,
+      image: users.image,
+      rsvpStatus: motiveAttendees.rsvpStatus,
+      role: motiveAttendees.role,
     })
-  );
+    .from(motiveAttendees)
+    .innerJoin(users, eq(users.id, motiveAttendees.userId))
+    .where(inArray(motiveAttendees.motiveId, filteredMotiveIds));
+
+  // Bulk fetch memory counts for all motives in one GROUP BY query
+  let memoryCountMap = new Map<string, number>();
+  try {
+    const memoryCounts = await db
+      .select({
+        motiveId: motiveMemories.motiveId,
+        total: sql<number>`COALESCE(SUM(array_length(${motiveMemories.storagePaths}, 1)), 0)`,
+      })
+      .from(motiveMemories)
+      .where(inArray(motiveMemories.motiveId, filteredMotiveIds))
+      .groupBy(motiveMemories.motiveId);
+    memoryCountMap = new Map(memoryCounts.map((r) => [r.motiveId, Number(r.total)]));
+  } catch (err: any) {
+    const code = err?.cause?.code ?? err?.code;
+    if (code !== '42703') throw err;
+    // Backward compat: storagePaths column not yet migrated, fall back to photoUrls
+    const legacyCounts = await db
+      .select({
+        motiveId: motiveMemories.motiveId,
+        total: sql<number>`COALESCE(SUM(array_length(${motiveMemories.photoUrls}, 1)), 0)`,
+      })
+      .from(motiveMemories)
+      .where(inArray(motiveMemories.motiveId, filteredMotiveIds))
+      .groupBy(motiveMemories.motiveId);
+    memoryCountMap = new Map(legacyCounts.map((r) => [r.motiveId, Number(r.total)]));
+  }
+
+  // Group attendees by motiveId
+  const attendeesMap = new Map<string, typeof allAttendeeRows>();
+  for (const a of allAttendeeRows) {
+    const list = attendeesMap.get(a.motiveId) ?? [];
+    list.push(a);
+    attendeesMap.set(a.motiveId, list);
+  }
+
+  const result = motiveRows.map((motive) => ({
+    ...motive,
+    attendees: attendeesMap.get(motive.id) ?? [],
+    memoryCount: memoryCountMap.get(motive.id) ?? 0,
+  }));
 
   return c.json({ motives: result });
 });

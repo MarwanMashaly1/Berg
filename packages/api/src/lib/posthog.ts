@@ -1,10 +1,31 @@
 import { PostHog } from 'posthog-node';
 
-export const posthog = new PostHog(process.env.POSTHOG_API_KEY ?? '', {
-  host: process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com',
-  flushAt: 20,
-  flushInterval: 10_000,
-});
+const apiKey = process.env.POSTHOG_API_KEY;
+
+// No-op client when key is absent — prevents flush errors and removes noise in dev
+const noop = () => {};
+const noopClient = {
+  capture: noop,
+  identify: noop,
+  flush: () => Promise.resolve(),
+  shutdown: () => Promise.resolve(),
+} as unknown as PostHog;
+
+export const posthog: PostHog = apiKey
+  ? new PostHog(apiKey, {
+      host: process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com',
+      flushAt: 5,
+      flushInterval: 5_000,
+    })
+  : noopClient;
+
+// Drain the queue before the process exits so no events are lost
+if (apiKey) {
+  const shutdown = () => posthog.shutdown().catch(() => {});
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
+  process.once('beforeExit', shutdown);
+}
 
 /** Capture a server-side exception to PostHog. userId optional if not authed. */
 export function captureException(err: unknown, userId?: string, extra?: Record<string, unknown>) {

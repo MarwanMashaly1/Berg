@@ -111,16 +111,36 @@ profileRoutes.get('/circles', async (c) => {
   const circleIds = memberships.map(m => m.groupCircleId);
   const joinedCircles = await db.select().from(groupCircles).where(inArray(groupCircles.id, circleIds));
 
-  const joined = await Promise.all(joinedCircles.map(async (gc) => {
-    const members = await db.select({ userId: groupCircleMembers.userId }).from(groupCircleMembers).where(and(eq(groupCircleMembers.groupCircleId, gc.id), eq(groupCircleMembers.status, 'active')));
-    const memberIds = members.map(m => m.userId);
-    const friendsInsideCount = myFriendIds.filter(id => memberIds.includes(id)).length;
-    const previewIds = memberIds.slice(0, 3);
-    const memberPreviews = previewIds.length > 0
-      ? await db.select({ id: users.id, name: users.name, image: users.image }).from(users).where(inArray(users.id, previewIds))
-      : [];
+  // Bulk fetch all members for all circles in one query
+  const allCircleMembers = await db
+    .select({ groupCircleId: groupCircleMembers.groupCircleId, userId: groupCircleMembers.userId })
+    .from(groupCircleMembers)
+    .where(and(inArray(groupCircleMembers.groupCircleId, circleIds), eq(groupCircleMembers.status, 'active')));
+
+  // Bulk fetch user previews for all unique member IDs in one query
+  const allMemberUserIds = [...new Set(allCircleMembers.map((m) => m.userId))];
+  const allUserPreviews = allMemberUserIds.length > 0
+    ? await db.select({ id: users.id, name: users.name, image: users.image }).from(users).where(inArray(users.id, allMemberUserIds))
+    : [];
+
+  const userPreviewById = new Map(allUserPreviews.map((u) => [u.id, u]));
+
+  const memberIdsByCircle = new Map<string, string[]>();
+  for (const m of allCircleMembers) {
+    const list = memberIdsByCircle.get(m.groupCircleId) ?? [];
+    list.push(m.userId);
+    memberIdsByCircle.set(m.groupCircleId, list);
+  }
+
+  const joined = joinedCircles.map((gc) => {
+    const memberIds = memberIdsByCircle.get(gc.id) ?? [];
+    const friendsInsideCount = myFriendIds.filter((id) => memberIds.includes(id)).length;
+    const memberPreviews = memberIds
+      .slice(0, 3)
+      .map((id) => userPreviewById.get(id))
+      .filter((u): u is NonNullable<typeof u> => !!u);
     return { id: gc.id, name: gc.name, categoryEmoji: gc.categoryEmoji, categoryColor: gc.categoryColor, memberCount: memberIds.length, friendsInsideCount, memberPreviews };
-  }));
+  });
 
   return c.json({ joined });
 });

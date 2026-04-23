@@ -122,6 +122,45 @@ memoriesRoutes.post('/:id/memories/confirm', async (c) => {
   return c.json({ ok: true, path });
 });
 
+// ── GET /api/motives/:id/memories/mine ────────────────────────────────────────
+// Returns the caller's own memory record with storage paths + signed read URLs.
+memoriesRoutes.get('/:id/memories/mine', async (c) => {
+  const me = c.get('user')!;
+  const motiveId = c.req.param('id');
+
+  if (!(await assertAttendee(motiveId, me.id))) {
+    return c.json({ error: 'not an attendee' }, 403);
+  }
+
+  const [row] = await db
+    .select({
+      vibeTags: motiveMemories.vibeTags,
+      rating: motiveMemories.rating,
+      venueRating: motiveMemories.venueRating,
+      storagePaths: motiveMemories.storagePaths,
+    })
+    .from(motiveMemories)
+    .where(and(eq(motiveMemories.motiveId, motiveId), eq(motiveMemories.userId, me.id)))
+    .limit(1);
+
+  if (!row) return c.json({ memory: null });
+
+  const signedUrls = await signPaths(row.storagePaths ?? []);
+  const photos = (row.storagePaths ?? []).map((path, i) => ({
+    path,
+    signedUrl: signedUrls[i] ?? '',
+  }));
+
+  return c.json({
+    memory: {
+      vibeTags: row.vibeTags ?? [],
+      rating: row.rating,
+      venueRating: row.venueRating,
+      photos,
+    },
+  });
+});
+
 // â”€â”€ GET /api/motives/:id/memories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns all attendees' memories with fresh signed read URLs.
 memoriesRoutes.get('/:id/memories', async (c) => {

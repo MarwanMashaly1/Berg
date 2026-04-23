@@ -1,5 +1,5 @@
 ﻿import { Hono } from 'hono';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../db.js';
 import {
@@ -38,14 +38,13 @@ chatsRoutes.get('/', async (c) => {
 
   // All chats the user belongs to
   const memberRows = await db
-    .select({ chatId: chatMembers.chatId, lastReadAt: chatMembers.lastReadAt })
+    .select({ chatId: chatMembers.chatId })
     .from(chatMembers)
     .where(eq(chatMembers.userId, me.id));
 
   if (memberRows.length === 0) return c.json({ chats: [] });
 
   const chatIds = memberRows.map((r) => r.chatId);
-  const lastReadMap = new Map(memberRows.map((r) => [r.chatId, r.lastReadAt]));
 
   // Fetch chat metadata
   const chatRows = await db
@@ -53,58 +52,82 @@ chatsRoutes.get('/', async (c) => {
     .from(chats)
     .where(inArray(chats.id, chatIds));
 
-  // Latest message per chat + unread count
-  const enriched = await Promise.all(
-    chatRows.map(async (chat) => {
-      const [lastMsg] = await db
-        .select({
-          id: messages.id,
-          content: messages.content,
-          senderId: messages.senderId,
-          createdAt: messages.createdAt,
-          senderName: users.name,
-        })
-        .from(messages)
-        .leftJoin(users, eq(messages.senderId, users.id))
-        .where(eq(messages.chatId, chat.id))
-        .orderBy(desc(messages.createdAt))
-        .limit(1);
+  if (chatRows.length === 0) return c.json({ chats: [] });
 
-      const lastRead = lastReadMap.get(chat.id);
-      const [{ unread }] = await db
-        .select({ unread: sql<number>`count(*)::int` })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.chatId, chat.id),
-            sql`${messages.senderId} != ${me.id}`,
-            lastRead
-              ? sql`${messages.createdAt} > ${lastRead.toISOString()}::timestamptz`
-              : undefined,
-          ),
-        );
+  // Bulk fetch: last message per chat, unread counts, member previews — 3 queries total
+  const chatIdList = sql.join(chatIds.map((id) => sql`${id}::uuid`), sql`, `);
 
-      // Member previews (up to 3 other members)
-      const memberPreviews = await db
-        .select({ id: users.id, name: users.name, image: users.image })
-        .from(chatMembers)
-        .leftJoin(users, eq(chatMembers.userId, users.id))
-        .where(and(eq(chatMembers.chatId, chat.id), sql`${chatMembers.userId} != ${me.id}`))
-        .limit(3);
+  type LastMsgRow = { chatId: string; id: string; content: string; senderId: string; createdAt: Date; senderName: string | null };
+  type UnreadRow  = { chatId: string; unread: number };
 
-      return {
-        id: chat.id,
-        type: chat.type,
-        name: chat.name,
-        motiveId: chat.motiveId,
-        groupCircleId: chat.groupCircleId,
-        createdAt: chat.createdAt,
-        lastMessage: lastMsg ?? null,
-        unreadCount: unread ?? 0,
-        memberPreviews,
-      };
-    }),
+  const [lastMsgsResult, unreadResult, allMemberPreviews] = await Promise.all([
+    db.execute(sql`
+      SELECT DISTINCT ON (m.chat_id)
+        m.chat_id::text   AS "chatId",
+        m.id::text        AS id,
+        m.content,
+        m.sender_id::text AS "senderId",
+        m.created_at      AS "createdAt",
+        u.name            AS "senderName"
+      FROM ${messages} m
+      LEFT JOIN ${users} u ON m.sender_id = u.id
+      WHERE m.chat_id IN (${chatIdList})
+      ORDER BY m.chat_id, m.created_at DESC
+    `),
+    db.execute(sql`
+      SELECT m.chat_id::text AS "chatId", COUNT(*)::int AS unread
+      FROM ${messages} m
+      JOIN ${chatMembers} cm
+        ON cm.chat_id = m.chat_id AND cm.user_id = ${me.id}
+      WHERE m.chat_id IN (${chatIdList})
+        AND m.sender_id != ${me.id}
+        AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+      GROUP BY m.chat_id
+    `),
+    db
+      .select({ chatId: chatMembers.chatId, id: users.id, name: users.name, image: users.image })
+      .from(chatMembers)
+      .leftJoin(users, eq(chatMembers.userId, users.id))
+      .where(and(inArray(chatMembers.chatId, chatIds), sql`${chatMembers.userId} != ${me.id}`)),
+  ]);
+
+  const lastMsgMap = new Map(
+    (lastMsgsResult as unknown as LastMsgRow[]).map((r) => [r.chatId, r]),
   );
+  const unreadMap = new Map(
+    (unreadResult as unknown as UnreadRow[]).map((r) => [r.chatId, Number(r.unread)]),
+  );
+  const memberPreviewMap = new Map<string, typeof allMemberPreviews>();
+  for (const m of allMemberPreviews) {
+    const list = memberPreviewMap.get(m.chatId) ?? [];
+    if (list.length < 3) {
+      list.push(m);
+      memberPreviewMap.set(m.chatId, list);
+    }
+  }
+
+  const enriched = chatRows.map((chat) => {
+    const lastMsgRow = lastMsgMap.get(chat.id);
+    return {
+      id: chat.id,
+      type: chat.type,
+      name: chat.name,
+      motiveId: chat.motiveId,
+      groupCircleId: chat.groupCircleId,
+      createdAt: chat.createdAt,
+      lastMessage: lastMsgRow
+        ? {
+            id: lastMsgRow.id,
+            content: lastMsgRow.content,
+            senderId: lastMsgRow.senderId,
+            createdAt: new Date(lastMsgRow.createdAt),
+            senderName: lastMsgRow.senderName,
+          }
+        : null,
+      unreadCount: unreadMap.get(chat.id) ?? 0,
+      memberPreviews: memberPreviewMap.get(chat.id) ?? [],
+    };
+  });
 
   // Sort by latest message descending
   enriched.sort((a, b) => {
@@ -163,7 +186,11 @@ chatsRoutes.get('/:id', async (c) => {
 chatsRoutes.get('/:id/messages', async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
-  const before = c.req.query('before'); // ISO timestamp cursor
+  const beforeRaw = c.req.query('before'); // ISO timestamp cursor
+  const beforeDate = beforeRaw ? new Date(beforeRaw) : null;
+  if (beforeDate && isNaN(beforeDate.getTime())) {
+    return c.json({ error: 'invalid before cursor' }, 400);
+  }
   const limit = Math.min(Number(c.req.query('limit') ?? 40), 100);
 
   if (!(await assertMember(chatId, me.id))) {
@@ -187,7 +214,7 @@ chatsRoutes.get('/:id/messages', async (c) => {
     .where(
       and(
         eq(messages.chatId, chatId),
-        before ? sql`${messages.createdAt} < ${new Date(before)}` : undefined,
+        beforeDate ? sql`${messages.createdAt} < ${beforeDate}` : undefined,
       ),
     )
     .orderBy(desc(messages.createdAt))
