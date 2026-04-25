@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -101,6 +101,7 @@ export default function ChatListScreen() {
 
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   const load = useCallback(async () => {
@@ -111,6 +112,12 @@ export default function ChatListScreen() {
       setLoading(false);
     }
   }, []);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
 
   // Reload whenever the screen comes back into focus (e.g. returning from a chat room)
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -202,6 +209,9 @@ export default function ChatListScreen() {
           contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />
+          }
         />
       )}
     </View>

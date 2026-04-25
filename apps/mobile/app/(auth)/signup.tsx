@@ -17,6 +17,9 @@ import { Colors, Fonts } from '../../constants/theme';
 import { GrainTexture } from '../../components/ui/GrainTexture';
 import { authClient } from '../../lib/auth';
 
+// Apple Sign-In is iOS-only — guard both import and usage
+const isIOS = Platform.OS === 'ios';
+
 const C = Colors.light;
 
 export default function SignUpScreen() {
@@ -29,8 +32,10 @@ export default function SignUpScreen() {
       : ''
   );
   const [googleError, setGoogleError] = useState('');
+  const [appleError, setAppleError] = useState('');
   const [magicLoading, setMagicLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const emailRef = useRef<TextInput>(null);
 
@@ -67,10 +72,9 @@ export default function SignUpScreen() {
     setGoogleLoading(true);
     setGoogleError('');
     try {
-      await authClient.signIn.social({
-        provider: 'google',
-        callbackURL: '/(app)/(tabs)/discovery',
-      });
+      // callbackURL must be a deep link — the expo client intercepts the redirect
+      const callbackURL = Linking.createURL('/');
+      await authClient.signIn.social({ provider: 'google', callbackURL });
       router.replace('/(app)/(tabs)/discovery');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
@@ -82,7 +86,24 @@ export default function SignUpScreen() {
     }
   }
 
-  const anyLoading = magicLoading || googleLoading;
+  async function handleApple() {
+    setAppleLoading(true);
+    setAppleError('');
+    try {
+      const callbackURL = Linking.createURL('/');
+      await authClient.signIn.social({ provider: 'apple', callbackURL });
+      router.replace('/(app)/(tabs)/discovery');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      if (message && !message.toLowerCase().includes('cancel')) {
+        setAppleError('Apple sign-in failed. Try again or use email.');
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
+  const anyLoading = magicLoading || googleLoading || appleLoading;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -145,28 +166,57 @@ export default function SignUpScreen() {
             {/* Divider */}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>prefer Google?</Text>
+              <Text style={styles.dividerText}>or continue with</Text>
               <View style={styles.dividerLine} />
             </View>
 
             {/* Google */}
             <TouchableOpacity
-              style={[styles.googleBtn, anyLoading && styles.btnDisabled]}
+              style={[styles.socialBtn, anyLoading && styles.btnDisabled]}
               onPress={handleGoogle}
               activeOpacity={0.8}
               disabled={anyLoading}
             >
-              <Text style={styles.googleG}>G</Text>
-              <Text style={styles.googleBtnText}>
-                {googleLoading ? 'Opening Google…' : 'Continue with Google'}
-              </Text>
+              {googleLoading
+                ? <ActivityIndicator color="#555" size="small" />
+                : <>
+                    <Text style={styles.googleG}>G</Text>
+                    <Text style={styles.socialBtnText}>Continue with Google</Text>
+                  </>
+              }
             </TouchableOpacity>
 
             {googleError ? (
-              <Text style={[styles.errorText, { textAlign: 'center', marginTop: 8, marginBottom: 0 }]}>
+              <Text style={[styles.errorText, { textAlign: 'center', marginTop: 6, marginBottom: 0 }]}>
                 {googleError}
               </Text>
             ) : null}
+
+            {/* Apple — iOS only */}
+            {isIOS && (
+              <>
+                <TouchableOpacity
+                  style={[styles.socialBtn, styles.appleBtn, anyLoading && styles.btnDisabled]}
+                  onPress={handleApple}
+                  activeOpacity={0.8}
+                  disabled={anyLoading}
+                >
+                  {appleLoading
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <>
+                        <Text style={styles.appleLogo}></Text>
+                        <Text style={styles.appleBtnText}>Continue with Apple</Text>
+                      </>
+                  }
+                </TouchableOpacity>
+
+                {appleError ? (
+                  <Text style={[styles.errorText, { textAlign: 'center', marginTop: 6, marginBottom: 0 }]}>
+                    {appleError}
+                  </Text>
+                ) : null}
+              </>
+            )}
 
           </View>
         </ScrollView>
@@ -282,7 +332,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#c0b0a0',
   },
-  googleBtn: {
+  socialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -292,15 +342,31 @@ const styles = StyleSheet.create({
     borderColor: '#e0d5c8',
     borderRadius: 14,
     paddingVertical: 14,
+    marginBottom: 12,
+  },
+  socialBtnText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 14,
+    color: '#555',
   },
   googleG: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 15,
     color: '#4285F4',
   },
-  googleBtnText: {
+  appleBtn: {
+    backgroundColor: '#000',
+    borderColor: '#000',
+  },
+  appleLogo: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 17,
+    color: '#fff',
+    lineHeight: 20,
+  },
+  appleBtnText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 14,
-    color: '#555',
+    color: '#fff',
   },
 });

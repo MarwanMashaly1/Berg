@@ -12,7 +12,6 @@ const MAX_VISIBLE = 6; // show at most 6 cards, then "See more →"
 type Props = {
   people: PersonSuggestion[];
   loading: boolean;
-  onAddToCircle: (userId: string) => void;
 };
 
 function PersonCard({ person }: { person: PersonSuggestion }) {
@@ -78,7 +77,7 @@ function SeeMoreCard({ count }: { count: number }) {
   );
 }
 
-export function PeopleSection({ people, loading, onAddToCircle }: Props) {
+export function PeopleSection({ people, loading }: Props) {
   if (loading) {
     return (
       <View style={styles.section}>
@@ -138,10 +137,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 13,
+    fontFamily: Fonts.headingRegular,
+    fontSize: 17,
     color: C.text,
-    letterSpacing: -0.1,
+    fontStyle: 'italic',
+    letterSpacing: -0.2,
   },
   seeAllLink: {
     fontFamily: Fonts.bodySemiBold,
@@ -208,15 +208,17 @@ const styles = StyleSheet.create({
   connectBtn: {
     marginTop: 'auto' as any,
     width: '100%',
-    backgroundColor: C.text,
+    backgroundColor: 'transparent',
     borderRadius: 10,
-    paddingVertical: 9,
+    paddingVertical: 8,
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: C.primary,
   },
   connectText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 12,
-    color: C.textInverse,
+    color: C.primary,
   },
 
   // See more card

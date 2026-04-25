@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useNavigationContainerRef } from 'expo-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PostHogProvider } from 'posthog-react-native';
@@ -20,10 +20,34 @@ import * as Notifications from 'expo-notifications';
 import { queryClient, savePushToken } from '../lib/api';
 import { Colors } from '../constants/theme';
 import { registerForPushNotificationsAsync, handleNotificationTap } from '../lib/notifications';
+import * as Sentry from '@sentry/react-native';
+
+// Navigation integration must be created before Sentry.init
+const navigationIntegration = Sentry.reactNavigationIntegration({
+  enableTimeToInitialDisplay: true,
+});
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  environment: __DEV__ ? 'development' : 'production',
+  // Sample 20% of sessions for performance traces — full coverage for errors
+  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+  integrations: [navigationIntegration],
+  // PII: names + emails help triage; disable if you want stricter privacy
+  sendDefaultPii: true,
+  // Don't enable in dev — Sentry's own logs pollute Metro output
+  enabled: !__DEV__,
+});
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+export default Sentry.wrap(function RootLayout() {
+  const navigationRef = useNavigationContainerRef();
+
+  useEffect(() => {
+    navigationIntegration.registerNavigationContainer(navigationRef);
+  }, []);
+
   const [fontsLoaded] = useFonts({
     Fraunces_400Regular,
     Fraunces_600SemiBold,
@@ -66,7 +90,7 @@ export default function RootLayout() {
     <PostHogProvider client={posthog}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
-          <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+          <Stack ref={navigationRef} screenOptions={{ headerShown: false, animation: 'fade' }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="(app)" />
@@ -75,4 +99,4 @@ export default function RootLayout() {
       </GestureHandlerRootView>
     </PostHogProvider>
   );
-}
+});

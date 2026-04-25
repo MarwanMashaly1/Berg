@@ -587,6 +587,17 @@ export function getMotiveMemories(motiveId: string) {
   return apiFetch<{ memories: MemoryContributor[] }>(`/api/motives/${motiveId}/memories`);
 }
 
+export type MyMemory = {
+  vibeTags: string[];
+  rating: number | null;
+  venueRating: number | null;
+  photos: { path: string; signedUrl: string }[];
+};
+
+export function getMyMemory(motiveId: string) {
+  return apiFetch<{ memory: MyMemory | null }>(`/api/motives/${motiveId}/memories/mine`);
+}
+
 export function getMemoryUploadUrl(motiveId: string, contentType: string, ext: string) {
   return apiFetch<{ uploadUrl: string; path: string; token: string }>(
     `/api/motives/${motiveId}/memories/upload-url`,

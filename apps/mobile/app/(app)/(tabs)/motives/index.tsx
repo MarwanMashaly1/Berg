@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,10 @@ import {
   FlatList,
   Dimensions,
   Pressable,
+  TextInput,
+  RefreshControl,
 } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -294,8 +297,10 @@ export default function MotivesScreen() {
   const { data: session } = authClient.useSession();
   const [motives, setMotives] = useState<Motive[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchMotives = useCallback(async () => {
     try {
@@ -314,7 +319,18 @@ export default function MotivesScreen() {
     fetchMotives();
   }, [fetchMotives]);
 
-  const filtered = filterMotives(motives, filter);
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchMotives();
+    setRefreshing(false);
+  }
+
+  const filtered = useMemo(() => {
+    const byFilter = filterMotives(motives, filter);
+    if (!searchQuery.trim()) return byFilter;
+    const q = searchQuery.toLowerCase();
+    return byFilter.filter(m => m.title.toLowerCase().includes(q));
+  }, [motives, filter, searchQuery]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -322,6 +338,25 @@ export default function MotivesScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Motives</Text>
         <Text style={styles.headerDate}>{formatHeaderDate()}</Text>
+      </View>
+
+      {/* Search bar */}
+      <View style={styles.searchBar}>
+        <MaterialIcons name="search" size={18} color={C.textTertiary} />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search motives…"
+          placeholderTextColor={C.textTertiary}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <MaterialIcons name="close" size={16} color={C.textTertiary} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Filter chips */}
@@ -365,6 +400,9 @@ export default function MotivesScreen() {
           renderItem={({ item, index }) => <MotiveCard motive={item} index={index} />}
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />
+          }
         />
       )}
 
@@ -408,6 +446,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: C.textTertiary,
     marginTop: 2,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    color: C.text,
+    padding: 0,
   },
   filterScroll: {
     flexGrow: 0,

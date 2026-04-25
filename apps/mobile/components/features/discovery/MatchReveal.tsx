@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, Switch, Dimensions } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Switch, Dimensions, PanResponder } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle,
   withTiming, withSpring, withDelay, withSequence,
-  Easing, runOnJS,
+  Easing,
 } from 'react-native-reanimated';
 import { Fonts } from '../../../constants/theme';
 import { MatchResult } from '../../../lib/api';
+import { Avatar } from '../../ui/Avatar';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -123,9 +124,21 @@ export function MatchReveal({ visible, result, promptOption, onDismiss, onMakePl
   if (!result) return null;
   const { state, matches, adjacentMatches } = result;
 
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderRelease: (_, g) => { if (g.dy > 80) onDismiss(); },
+    }),
+  ).current;
+
   return (
-    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent>
+    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent onRequestClose={onDismiss}>
       <View style={styles.overlay}>
+
+        {/* Drag handle — only this area handles the swipe gesture */}
+        <View style={styles.dragHandle} {...pan.panHandlers}>
+          <View style={styles.dragPill} />
+        </View>
 
         {/* Confetti only for State A */}
         {state === 'matches' && <Confetti />}
@@ -177,9 +190,13 @@ function StateMatches({ matches, promptOption, onDismiss, onMakePlan }: {
       <AnimatedContent delay={200}>
         <View style={styles.avatarRow}>
           {matches.slice(0, 3).map((m, i) => (
-            <View key={m.userId} style={[styles.avatar, { zIndex: 3 - i, marginLeft: i === 0 ? 0 : -16 }]}>
-              <Text style={styles.avatarText}>👤</Text>
-            </View>
+            <Avatar
+              key={m.userId}
+              name={m.name}
+              userId={m.userId}
+              size="lg"
+              style={[styles.avatar, { zIndex: 3 - i, marginLeft: i === 0 ? 0 : -16 }]}
+            />
           ))}
         </View>
         <Text style={styles.nameList}>
@@ -205,10 +222,10 @@ function StateMatches({ matches, promptOption, onDismiss, onMakePlan }: {
           style={styles.ctaPrimary}
           onPress={() => onMakePlan(matches.map((m) => m.userId))}
         >
-          <Text style={styles.ctaPrimaryText}>Make a plan together →</Text>
+          <Text style={styles.ctaPrimaryText}>Make a plan together</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.ctaSecondary} onPress={onDismiss}>
-          <Text style={styles.ctaSecondaryText}>↓ Back to Discovery</Text>
+          <Text style={styles.ctaSecondaryText}>Not now</Text>
         </TouchableOpacity>
       </AnimatedContent>
     </>
@@ -243,7 +260,7 @@ function StateFirstInCircle({ adjacentMatches, onDismiss }: {
           <Switch value={true} thumbColor="#fff" trackColor={{ true: '#FF6B35', false: '#555' }} />
         </View>
         <TouchableOpacity style={styles.ctaSecondary} onPress={onDismiss}>
-          <Text style={styles.ctaSecondaryText}>↓ Swipe down to explore</Text>
+          <Text style={styles.ctaSecondaryText}>Not now</Text>
         </TouchableOpacity>
       </AnimatedContent>
     </>
@@ -270,7 +287,7 @@ function StateFirstInNetwork({ onDismiss }: { onDismiss: () => void }) {
           <Switch value={true} thumbColor="#fff" trackColor={{ true: '#FF6B35', false: '#555' }} />
         </View>
         <TouchableOpacity style={styles.ctaSecondary} onPress={onDismiss}>
-          <Text style={styles.ctaSecondaryText}>↓ Swipe down to explore</Text>
+          <Text style={styles.ctaSecondaryText}>Not now</Text>
         </TouchableOpacity>
       </AnimatedContent>
     </>
@@ -278,37 +295,54 @@ function StateFirstInNetwork({ onDismiss }: { onDismiss: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: '#0f0f0f' },
-  content: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 60 },
-  tabBarDim: { height: 50, backgroundColor: 'rgba(255,255,255,0.04)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
-  echoPill: { backgroundColor: 'rgba(255,107,53,0.15)', borderWidth: 1, borderColor: 'rgba(255,107,53,0.3)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 16 },
-  echoText: { fontSize: 11, color: '#FF6B35', fontFamily: Fonts.bodySemiBold },
-  bigNumber: { fontSize: 56, fontFamily: Fonts.bodyBold, color: '#fff', lineHeight: 64, textAlign: 'center' },
-  bigSub: { fontSize: 12, color: 'rgba(255,255,255,0.45)', fontFamily: Fonts.body, marginBottom: 20, textAlign: 'center' },
-  avatarRow: { flexDirection: 'row', justifyContent: 'center', marginBottom: 8 },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#ffe8dc', borderWidth: 3, borderColor: '#0f0f0f', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 24 },
-  nameList: { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: Fonts.body, marginBottom: 6, textAlign: 'center' },
-  storiesBlock: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: 12, width: '100%', marginBottom: 16 },
-  storyRow: { marginBottom: 6 },
-  storyName: { fontSize: 9, color: 'rgba(255,255,255,0.5)', fontFamily: Fonts.body },
-  storyQuote: { fontSize: 11, color: 'rgba(255,255,255,0.85)', fontFamily: Fonts.headingRegular, fontStyle: 'italic' },
-  ctaPrimary: { backgroundColor: '#FF6B35', borderRadius: 12, paddingVertical: 13, paddingHorizontal: 24, width: '100%', alignItems: 'center', marginBottom: 8 },
-  ctaPrimaryText: { fontSize: 12, fontFamily: Fonts.bodySemiBold, color: '#fff' },
-  ctaSecondary: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 24, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  ctaSecondaryText: { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: Fonts.body },
-  iconBadge: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(255,107,53,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  iconEmoji: { fontSize: 36, textAlign: 'center', marginBottom: 12 },
-  warmHeading: { fontFamily: Fonts.heading, fontSize: 18, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginBottom: 4 },
-  warmSubHeading: { fontFamily: Fonts.heading, fontSize: 18, color: '#fff', textAlign: 'center', marginBottom: 16 },
-  adjacentRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 10, width: '100%', marginBottom: 6, opacity: 0.6 },
+  overlay: { flex: 1, backgroundColor: '#100D0B' },
+  dragHandle: {
+    width: '100%', paddingVertical: 14,
+    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+  },
+  dragPill: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  content: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingBottom: 48 },
+  tabBarDim: { height: 50, backgroundColor: 'rgba(255,255,255,0.03)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)' },
+  echoPill: { backgroundColor: 'rgba(255,107,53,0.15)', borderWidth: 1, borderColor: 'rgba(255,107,53,0.3)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7, marginBottom: 20 },
+  echoText: { fontSize: 12, color: '#FF8C5A', fontFamily: Fonts.bodySemiBold },
+  bigNumber: { fontSize: 72, fontFamily: Fonts.heading, color: '#fff', lineHeight: 80, textAlign: 'center', letterSpacing: -2 },
+  bigSub: { fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: Fonts.body, marginBottom: 24, textAlign: 'center' },
+  avatarRow: { flexDirection: 'row', justifyContent: 'center', marginBottom: 10 },
+  avatar: { borderWidth: 3, borderColor: '#100D0B' },
+  nameList: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: Fonts.body, marginBottom: 8, textAlign: 'center' },
+  storiesBlock: { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderRadius: 16, padding: 14, width: '100%', marginBottom: 20 },
+  storyRow: { marginBottom: 8 },
+  storyName: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontFamily: Fonts.bodySemiBold },
+  storyQuote: { fontSize: 13, color: 'rgba(255,255,255,0.88)', fontFamily: Fonts.headingRegular, fontStyle: 'italic' },
+  ctaPrimary: {
+    backgroundColor: '#FF6B35', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 24,
+    width: '100%', alignItems: 'center', marginBottom: 10,
+    shadowColor: '#FF6B35', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 10,
+  },
+  ctaPrimaryText: { fontSize: 15, fontFamily: Fonts.bodySemiBold, color: '#fff', letterSpacing: 0.2 },
+  ctaSecondary: {
+    borderRadius: 16, paddingVertical: 14, paddingHorizontal: 24,
+    width: '100%', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  ctaSecondaryText: { fontSize: 14, color: 'rgba(255,255,255,0.55)', fontFamily: Fonts.body },
+  iconBadge: { width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(255,107,53,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  iconEmoji: { fontSize: 36, textAlign: 'center', marginBottom: 14 },
+  warmHeading: { fontFamily: Fonts.heading, fontSize: 20, color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginBottom: 4, fontStyle: 'italic' },
+  warmSubHeading: { fontFamily: Fonts.heading, fontSize: 20, color: '#fff', textAlign: 'center', marginBottom: 20, fontStyle: 'italic' },
+  adjacentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: 12, width: '100%', marginBottom: 8 },
   adjacentEmoji: { fontSize: 20 },
-  adjacentName: { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontFamily: Fonts.body },
-  boldTake: { fontFamily: Fonts.heading, fontSize: 32, color: '#fff', textAlign: 'center', marginBottom: 6 },
-  rareText: { fontFamily: Fonts.heading, fontSize: 16, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginBottom: 8 },
-  pingText: { fontFamily: Fonts.body, fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: 20 },
-  notifToggle: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 14, padding: 14, width: '100%', marginBottom: 16, gap: 12 },
+  adjacentName: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontFamily: Fonts.body },
+  boldTake: { fontFamily: Fonts.heading, fontSize: 36, color: '#fff', textAlign: 'center', marginBottom: 8, letterSpacing: -0.5, fontStyle: 'italic' },
+  rareText: { fontFamily: Fonts.headingRegular, fontSize: 18, color: 'rgba(255,255,255,0.75)', textAlign: 'center', marginBottom: 10, fontStyle: 'italic' },
+  pingText: { fontFamily: Fonts.body, fontSize: 13, color: 'rgba(255,255,255,0.45)', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  notifToggle: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: 16, width: '100%', marginBottom: 16, gap: 14 },
   notifTextBlock: { flex: 1 },
-  notifTitle: { fontSize: 11, fontFamily: Fonts.bodySemiBold, color: '#fff' },
-  notifSub: { fontSize: 9, fontFamily: Fonts.body, color: 'rgba(255,255,255,0.35)', marginTop: 2 },
+  notifTitle: { fontSize: 13, fontFamily: Fonts.bodySemiBold, color: '#fff' },
+  notifSub: { fontSize: 11, fontFamily: Fonts.body, color: 'rgba(255,255,255,0.4)', marginTop: 3 },
 });

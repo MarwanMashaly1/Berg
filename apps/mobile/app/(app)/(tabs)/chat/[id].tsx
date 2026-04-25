@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Modal,
-  ScrollView, Alert, Image as RNImage,
+  ScrollView, Alert, Image as RNImage, RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -49,11 +49,19 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
+type OptimisticMsg = {
+  localId: string;
+  content: string;
+  status: 'sending' | 'failed';
+  createdAt: string;
+};
+
 type ListItem =
   | { type: 'message'; data: ChatMessage }
-  | { type: 'separator'; date: string; key: string };
+  | { type: 'separator'; date: string; key: string }
+  | { type: 'optimistic'; data: OptimisticMsg };
 
-function buildListItems(msgs: ChatMessage[]): ListItem[] {
+function buildListItems(msgs: ChatMessage[], optimistic: OptimisticMsg[]): ListItem[] {
   const items: ListItem[] = [];
   let lastDay: string | null = null;
   for (const msg of msgs) {
@@ -63,6 +71,9 @@ function buildListItems(msgs: ChatMessage[]): ListItem[] {
       lastDay = day;
     }
     items.push({ type: 'message', data: msg });
+  }
+  for (const msg of optimistic) {
+    items.push({ type: 'optimistic', data: msg });
   }
   return items;
 }
@@ -409,7 +420,9 @@ export default function ChatRoomScreen() {
   const isGroup = chatType === 'group';
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [optimistic, setOptimistic] = useState<OptimisticMsg[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [typingNames, setTypingNames] = useState<string[]>([]);
@@ -437,6 +450,24 @@ export default function ChatRoomScreen() {
       setLoading(false);
     }
   }, [chatId]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await loadHistory();
+    setRefreshing(false);
+  }
+
+  // When user returns to screen after a connection drop, reload history and
+  // resubscribe presence so the channel is definitely live.
+  useFocusEffect(useCallback(() => {
+    loadHistory();
+    if (channelRef.current) {
+      const state = (channelRef.current as any).state as string | undefined;
+      if (state === 'closed' || state === 'errored') {
+        channelRef.current.subscribe();
+      }
+    }
+  }, [loadHistory]));
 
   // ── Realtime ────────────────────────────────────────────────────────────────
 
@@ -503,6 +534,23 @@ export default function ChatRoomScreen() {
 
   // ── Send text ───────────────────────────────────────────────────────────────
 
+  async function trySend(content: string, localId?: string) {
+    if (!chatId) return;
+    const id = localId ?? `local-${Date.now()}`;
+    setOptimistic(prev =>
+      localId
+        ? prev.map(m => m.localId === id ? { ...m, status: 'sending' } : m)
+        : [...prev, { localId: id, content, status: 'sending', createdAt: new Date().toISOString() }],
+    );
+    try {
+      await sendMessage(chatId, content);
+      // Real message will arrive via realtime; remove optimistic placeholder
+      setOptimistic(prev => prev.filter(m => m.localId !== id));
+    } catch {
+      setOptimistic(prev => prev.map(m => m.localId === id ? { ...m, status: 'failed' } : m));
+    }
+  }
+
   async function handleSend() {
     const trimmed = text.trim();
     if (!trimmed || sending || !chatId) return;
@@ -513,9 +561,12 @@ export default function ChatRoomScreen() {
     isTypingRef.current = false;
     broadcastTyping(false);
     try {
-      await sendMessage(chatId, trimmed);
-    } catch { setText(trimmed); }
-    finally { setSending(false); }
+      await trySend(trimmed);
+    } finally { setSending(false); }
+  }
+
+  function handleRetry(msg: OptimisticMsg) {
+    trySend(msg.content, msg.localId);
   }
 
   // ── Send GIF ────────────────────────────────────────────────────────────────
@@ -589,7 +640,7 @@ export default function ChatRoomScreen() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  const listItems = buildListItems(messages);
+  const listItems = buildListItems(messages, optimistic);
 
   return (
     <>
@@ -630,7 +681,11 @@ export default function ChatRoomScreen() {
           <FlatList
             ref={listRef}
             data={listItems}
-            keyExtractor={item => item.type === 'message' ? item.data.id : item.key}
+            keyExtractor={item =>
+              item.type === 'message' ? item.data.id :
+              item.type === 'optimistic' ? item.data.localId :
+              item.key
+            }
             renderItem={({ item }) => {
               if (item.type === 'separator') {
                 return (
@@ -641,12 +696,32 @@ export default function ChatRoomScreen() {
                   </View>
                 );
               }
+              if (item.type === 'optimistic') {
+                const failed = item.data.status === 'failed';
+                return (
+                  <TouchableOpacity
+                    style={[styles.bubbleWrap, styles.bubbleWrapMe]}
+                    onPress={() => failed && handleRetry(item.data)}
+                    activeOpacity={failed ? 0.7 : 1}
+                  >
+                    <View style={[styles.bubble, styles.bubbleMe, failed && styles.bubbleFailed]}>
+                      <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.data.content}</Text>
+                    </View>
+                    <Text style={[styles.timeLabel, styles.timeLabelMe, failed && { color: C.error }]}>
+                      {failed ? 'Failed · Tap to retry' : 'Sending…'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }
               return <MessageBubble msg={item.data} isMe={item.data.senderId === myId} />;
             }}
             contentContainerStyle={{ paddingVertical: 12, paddingHorizontal: 12 }}
             showsVerticalScrollIndicator={false}
             onLayout={() => listRef.current?.scrollToEnd({ animated: false })}
             ListFooterComponent={<TypingIndicator names={typingNames} />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />
+            }
           />
         )}
 
@@ -669,7 +744,7 @@ export default function ChatRoomScreen() {
 
           {/* GIF */}
           <TouchableOpacity style={styles.iconBtn} onPress={() => setShowGif(true)}>
-            <Text style={styles.gifLabel}>GIF</Text>
+            <MaterialIcons name="gif" size={28} color={C.textSecondary} />
           </TouchableOpacity>
 
           {/* Image */}
@@ -751,6 +826,7 @@ const styles = StyleSheet.create({
   senderName: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: C.textSecondary, marginBottom: 2, marginLeft: 4 },
   bubble: { borderRadius: 18, paddingVertical: 9, paddingHorizontal: 14 },
   bubbleMe: { backgroundColor: C.primary, borderBottomRightRadius: 4 },
+  bubbleFailed: { backgroundColor: 'rgba(230,57,70,0.15)', borderWidth: 1, borderColor: 'rgba(230,57,70,0.4)' },
   bubbleThem: { backgroundColor: '#FFFFFF', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)' },
   bubbleText: { fontFamily: Fonts.body, fontSize: 14, lineHeight: 20 },
   bubbleTextMe: { color: C.textInverse },
@@ -769,12 +845,11 @@ const styles = StyleSheet.create({
   typingText: { fontFamily: Fonts.body, fontSize: 11, color: C.textSecondary, fontStyle: 'italic' },
 
   inputBar: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: 6,
-    paddingHorizontal: 8, paddingTop: 8,
+    flexDirection: 'row', alignItems: 'flex-end', gap: 4,
+    paddingHorizontal: 12, paddingTop: 10,
     borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.surface,
   },
-  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  gifLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: C.textSecondary },
+  iconBtn: { width: 36, height: 38, alignItems: 'center', justifyContent: 'center' },
   input: {
     flex: 1, fontFamily: Fonts.body, fontSize: 14, color: C.text,
     backgroundColor: '#F5EEE5', borderRadius: 20,

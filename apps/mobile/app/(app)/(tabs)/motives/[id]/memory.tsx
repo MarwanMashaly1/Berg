@@ -26,6 +26,7 @@ import { Avatar } from '../../../../../components/ui/Avatar';
 import { BackButton } from '../../../../../components/ui/BackButton';
 import {
   getMotive,
+  getMyMemory,
   saveMemoryMeta,
   getMemoryUploadUrl,
   confirmMemoryUpload,
@@ -35,6 +36,7 @@ import {
 
 const C = Colors.light;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const MAX_PHOTOS = 10;
 
 // ─── Vibe tags ────────────────────────────────────────────────────────────────
 
@@ -73,7 +75,7 @@ const RATINGS = [
   { value: 5, emoji: '🔥', label: 'Iconic' },
 ];
 
-// ─── Orange CTA ───────────────────────────────────────────────────────────────
+// ─── Shared components ────────────────────────────────────────────────────────
 
 function OrangeCta({ label, onPress, disabled = false }: { label: string; onPress: () => void; disabled?: boolean }) {
   return (
@@ -133,9 +135,64 @@ function Step1Vibe({
   );
 }
 
-// ─── Step 2 — Photos ─────────────────────────────────────────────────────────
+// ─── Photos grid (used in Step 2 and return-visit photo manager) ─────────────
 
 type UploadedPhoto = { localUri: string; path: string };
+
+function PhotoGrid({
+  photos,
+  uploading,
+  onAdd,
+  onRemove,
+  atLimit,
+}: {
+  photos: UploadedPhoto[];
+  uploading: boolean;
+  onAdd: () => void;
+  onRemove: (idx: number) => void;
+  atLimit: boolean;
+}) {
+  const slotSize = (SCREEN_WIDTH - 48) / 3;
+  const slots = Array.from({ length: MAX_PHOTOS });
+
+  return (
+    <View style={styles.photoGrid}>
+      {slots.map((_, i) => {
+        const photo = photos[i];
+        if (photo) {
+          return (
+            <View key={i} style={[styles.photoSlotFilled, { width: slotSize, height: slotSize }]}>
+              <Image source={{ uri: photo.localUri }} style={StyleSheet.absoluteFill} />
+              <TouchableOpacity onPress={() => onRemove(i)} style={styles.photoRemove}>
+                <View style={styles.xLine1} />
+                <View style={styles.xLine2} />
+              </TouchableOpacity>
+            </View>
+          );
+        }
+        const isNext = i === photos.length;
+        if (atLimit) return null;
+        return (
+          <TouchableOpacity
+            key={i}
+            onPress={isNext ? onAdd : undefined}
+            style={[styles.photoSlotEmpty, { width: slotSize, height: slotSize }, !isNext && styles.photoSlotLocked]}
+            activeOpacity={isNext ? 0.7 : 1}
+          >
+            {isNext && uploading ? (
+              <ActivityIndicator color={C.primary} size="small" />
+            ) : isNext ? (
+              <>
+                <View style={styles.plusH} />
+                <View style={styles.plusV} />
+              </>
+            ) : null}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
 
 function Step2Photos({
   photos,
@@ -148,50 +205,14 @@ function Step2Photos({
   onAdd: () => void;
   onRemove: (idx: number) => void;
 }) {
-  const slotSize = (SCREEN_WIDTH - 48) / 3;
-  const MAX = 10;
-  const slots = Array.from({ length: MAX });
-
+  const atLimit = photos.length >= MAX_PHOTOS;
   return (
     <ScrollView style={styles.stepScroll} contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
       <Text style={styles.stepHeading}>Add some photos</Text>
-      <Text style={styles.stepSub}>Optional — up to {MAX}</Text>
-
-      <View style={styles.photoGrid}>
-        {slots.map((_, i) => {
-          const photo = photos[i];
-          if (photo) {
-            return (
-              <View key={i} style={[styles.photoSlotFilled, { width: slotSize, height: slotSize }]}>
-                <Image source={{ uri: photo.localUri }} style={StyleSheet.absoluteFill} />
-                <TouchableOpacity onPress={() => onRemove(i)} style={styles.photoRemove}>
-                  {/* X drawn with Views */}
-                  <View style={styles.xLine1} />
-                  <View style={styles.xLine2} />
-                </TouchableOpacity>
-              </View>
-            );
-          }
-          const isNext = i === photos.length;
-          return (
-            <TouchableOpacity
-              key={i}
-              onPress={isNext ? onAdd : undefined}
-              style={[styles.photoSlotEmpty, { width: slotSize, height: slotSize }, !isNext && styles.photoSlotLocked]}
-              activeOpacity={isNext ? 0.7 : 1}
-            >
-              {isNext && uploading ? (
-                <ActivityIndicator color={C.primary} size="small" />
-              ) : isNext ? (
-                <>
-                  <View style={styles.plusH} />
-                  <View style={styles.plusV} />
-                </>
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <Text style={styles.stepSub}>
+        {atLimit ? `${MAX_PHOTOS}/${MAX_PHOTOS} — limit reached` : `Optional — up to ${MAX_PHOTOS}`}
+      </Text>
+      <PhotoGrid photos={photos} uploading={uploading} onAdd={onAdd} onRemove={onRemove} atLimit={atLimit} />
     </ScrollView>
   );
 }
@@ -354,6 +375,61 @@ function Step4Card({
   );
 }
 
+// ─── Return-visit: photo manager ──────────────────────────────────────────────
+
+function PhotoManagerScreen({
+  motive,
+  photos,
+  uploading,
+  onAdd,
+  onRemove,
+  selectedTags,
+  rating,
+  onDone,
+  saving,
+}: {
+  motive: Motive;
+  photos: UploadedPhoto[];
+  uploading: boolean;
+  onAdd: () => void;
+  onRemove: (idx: number) => void;
+  selectedTags: string[];
+  rating: number;
+  onDone: () => void;
+  saving: boolean;
+}) {
+  const atLimit = photos.length >= MAX_PHOTOS;
+  const ratingEmoji = RATINGS.find(r => r.value === rating)?.emoji ?? '';
+  const tagLine = selectedTags.slice(0, 3).join(' · ');
+
+  return (
+    <ScrollView style={styles.stepScroll} contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
+      <Text style={styles.stepHeading}>Your memories</Text>
+
+      {/* Summary of existing rating/vibe */}
+      <View style={styles.summaryRow}>
+        {rating > 0 && <Text style={styles.summaryRating}>{ratingEmoji} {RATINGS.find(r => r.value === rating)?.label}</Text>}
+        {tagLine.length > 0 && <Text style={styles.summaryTags}>{tagLine}</Text>}
+      </View>
+
+      <Text style={styles.stepSub}>
+        {atLimit
+          ? `${MAX_PHOTOS}/${MAX_PHOTOS} photos — limit reached`
+          : `${photos.length}/${MAX_PHOTOS} photos · tap + to add more`}
+      </Text>
+
+      <PhotoGrid photos={photos} uploading={uploading} onAdd={onAdd} onRemove={onRemove} atLimit={atLimit} />
+
+      <TouchableOpacity
+        onPress={() => router.push(`/(app)/(tabs)/motives/${motive.id}/memories` as any)}
+        style={styles.galleryLink}
+      >
+        <Text style={styles.galleryLinkText}>View everyone's memories →</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function MemoryScreen() {
@@ -361,6 +437,10 @@ export default function MemoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [motive, setMotive] = useState<Motive | null>(null);
+  const [loading, setLoading] = useState(true);
+  // 'first' = no existing record, run full 4-step flow
+  // 'return' = existing record, show photo manager
+  const [mode, setMode] = useState<'first' | 'return'>('first');
   const [step, setStep] = useState(1);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
@@ -372,12 +452,28 @@ export default function MemoryScreen() {
 
   useEffect(() => {
     if (!id) return;
-    getMotive(id).then(res => setMotive(res.motive)).catch(() => {});
+
+    Promise.all([
+      getMotive(id).then(res => setMotive(res.motive)).catch(() => {}),
+      getMyMemory(id).then(res => {
+        const mem = res.memory;
+        if (mem) {
+          // Existing memory — pre-populate and go directly to photo manager
+          setSelectedTags(mem.vibeTags ?? []);
+          setRating(mem.rating ?? 0);
+          setVenueRating(mem.venueRating ?? 0);
+          setPhotos(mem.photos.map(p => ({ localUri: p.signedUrl, path: p.path })));
+          setMode('return');
+        }
+      }).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => {
-    progressWidth.value = withTiming((step / 4) * 100, { duration: 350 });
-  }, [step]);
+    if (mode === 'first') {
+      progressWidth.value = withTiming((step / 4) * 100, { duration: 350 });
+    }
+  }, [step, mode]);
 
   const progressStyle = useAnimatedStyle(() => ({
     width: `${progressWidth.value}%`,
@@ -390,7 +486,7 @@ export default function MemoryScreen() {
   }
 
   async function handleAddPhoto() {
-    if (uploading || photos.length >= 10 || !id) return;
+    if (uploading || photos.length >= MAX_PHOTOS || !id) return;
 
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
@@ -413,12 +509,8 @@ export default function MemoryScreen() {
 
     setUploading(true);
     try {
-      // 1. Get signed upload URL from our API
       const { uploadUrl, path } = await getMemoryUploadUrl(id, mimeType, ext);
 
-      // 2. Read local file as blob and PUT directly to the signed URL.
-      //    We bypass the Supabase JS client here — blob serialization via the
-      //    client is unreliable in React Native; a plain fetch PUT works reliably.
       const fileResponse = await fetch(uri);
       const blob = await fileResponse.blob();
       const uploadResponse = await fetch(uploadUrl, {
@@ -432,9 +524,7 @@ export default function MemoryScreen() {
         throw new Error(`Storage upload failed: ${text}`);
       }
 
-      // 3. Confirm path in our DB
       await confirmMemoryUpload(id, path);
-
       setPhotos(prev => [...prev, { localUri: uri, path }]);
     } catch (e: any) {
       console.error('[memory] upload failed:', e);
@@ -472,14 +562,65 @@ export default function MemoryScreen() {
     }
   }
 
-  const title = motive?.title ?? 'Memory';
-  const truncTitle = title.length > 20 ? title.slice(0, 20) + '…' : title;
+  // Return-visit: just save any photo changes (meta already saved) and go back
+  async function handleDone() {
+    if (!id) return;
+    setSaving(true);
+    try {
+      await saveMemoryMeta(id, {
+        vibeTags: selectedTags,
+        rating: rating || undefined,
+        venueRating: venueRating || undefined,
+      });
+    } catch { /* non-fatal */ }
+    setSaving(false);
+    router.back();
+  }
 
   function handleBack() {
+    if (mode === 'return') { router.back(); return; }
     if (step === 1) router.back();
     else setStep(s => s - 1);
   }
 
+  if (loading) {
+    return (
+      <View style={[styles.safe, { paddingTop: insets.top, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={C.primary} />
+      </View>
+    );
+  }
+
+  // ── Return-visit mode ──────────────────────────────────────────────────────
+  if (mode === 'return') {
+    return (
+      <View style={[styles.safe, { paddingTop: insets.top }]}>
+        <View style={styles.topBar}>
+          <BackButton variant="light" onPress={handleBack} />
+          <Text style={styles.topBarTitle}>Memories</Text>
+          <TouchableOpacity onPress={handleDone} disabled={saving} style={styles.doneBtn}>
+            <Text style={[styles.doneBtnText, saving && { opacity: 0.4 }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+
+        {motive && (
+          <PhotoManagerScreen
+            motive={motive}
+            photos={photos}
+            uploading={uploading}
+            onAdd={handleAddPhoto}
+            onRemove={handleRemovePhoto}
+            selectedTags={selectedTags}
+            rating={rating}
+            onDone={handleDone}
+            saving={saving}
+          />
+        )}
+      </View>
+    );
+  }
+
+  // ── First-visit mode (4-step flow) ────────────────────────────────────────
   const canNext3 = rating > 0;
 
   return (
@@ -579,6 +720,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: C.textTertiary,
   },
+  topBarTitle: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 15,
+    color: C.text,
+  },
+  doneBtn: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  doneBtnText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 15,
+    color: C.primary,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 6,
+  },
+  summaryRating: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 14,
+    color: C.text,
+  },
+  summaryTags: {
+    fontFamily: Fonts.body,
+    fontSize: 13,
+    color: C.textTertiary,
+  },
   stepScroll: {
     flex: 1,
   },
@@ -605,11 +777,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginBottom: 16,
-  },
-  counterText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 12,
-    color: C.textTertiary,
   },
   counterTextMet: {
     color: C.primary,
@@ -850,7 +1017,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   galleryLink: {
-    marginTop: 8,
+    marginTop: 24,
     paddingVertical: 8,
   },
   galleryLinkText: {

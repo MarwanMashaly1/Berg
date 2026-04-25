@@ -16,6 +16,7 @@ type Props = {
   prompt: TodayPromptResponse['prompt'];
   userResponse: TodayPromptResponse['userResponse'];
   onReveal: () => void;
+  onAnswered?: (optionKey: string, optionIndex: number, storyText?: string) => void;
 };
 
 // ─── Shared bounce animation ───────────────────────────────────────────────────
@@ -113,7 +114,7 @@ function SpectrumPole({
 
 // ─── Main PromptCard ──────────────────────────────────────────────────────────
 
-export function PromptCard({ prompt, userResponse, onReveal }: Props) {
+export function PromptCard({ prompt, userResponse, onReveal, onAnswered }: Props) {
   const [selectedKey, setSelectedKey]   = useState(userResponse?.optionKey ?? null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(
     userResponse?.optionIndex ?? null,
@@ -145,6 +146,7 @@ export function PromptCard({ prompt, userResponse, onReveal }: Props) {
         storyText: storyText || undefined,
       });
       cardScale.value = withSpring(1.0, { damping: 10 });
+      onAnswered?.(selectedKey, selectedIndex, storyText || undefined);
       onReveal();
     } catch (e) {
       console.error('Failed to respond:', e);

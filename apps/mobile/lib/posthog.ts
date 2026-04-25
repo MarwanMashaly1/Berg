@@ -1,16 +1,20 @@
 import PostHog from 'posthog-react-native';
 
-export const posthog = new PostHog(
-  process.env.EXPO_PUBLIC_POSTHOG_API_KEY ?? '',
-  {
-    host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
-    errorTracking: {
-      autocapture: {
-        uncaughtExceptions: true,
-        unhandledRejections: true,
-        // console interception intentionally omitted — it suppresses React Native's
-        // error overlay and makes debugging impossible (white screen instead of red screen)
-      },
-    },
-  },
-);
+const apiKey = process.env.EXPO_PUBLIC_POSTHOG_API_KEY;
+
+// No-op stub used when the key is missing — prevents flush errors in dev/CI
+const noop = () => {};
+const noopPosthog = {
+  identify: noop, reset: noop, screen: noop, capture: noop, flush: noop,
+} as unknown as PostHog;
+
+export const posthog: PostHog = apiKey
+  ? new PostHog(apiKey, {
+      host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
+      // Flush early and often — smaller queue = less lost on background kill
+      flushAt: 5,
+      flushInterval: 5_000,
+      // No errorTracking — Sentry is the error tracker; both racing to flush on
+      // uncaught exceptions is what causes the "failed to flush" noise
+    })
+  : noopPosthog;

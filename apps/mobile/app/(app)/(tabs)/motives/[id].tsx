@@ -16,7 +16,7 @@ import { CATEGORY_MAP } from '../../../../constants/motives';
 import { Avatar } from '../../../../components/ui/Avatar';
 import { BackButton } from '../../../../components/ui/BackButton';
 import { authClient } from '../../../../lib/auth';
-import { apiFetch, confirmMotive } from '../../../../lib/api';
+import { apiFetch, confirmMotive, getMyMemory, type MyMemory } from '../../../../lib/api';
 
 const C = Colors.light;
 
@@ -183,6 +183,7 @@ export default function MotiveDetailScreen() {
   const [myRsvp, setMyRsvp] = useState<RsvpStatus | null>(null);
   const [rsvpLoading, setRsvpLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [myMemory, setMyMemory] = useState<MyMemory | null>(null);
 
   const fetchMotive = useCallback(async () => {
     if (!id) return;
@@ -218,6 +219,12 @@ export default function MotiveDetailScreen() {
   useEffect(() => {
     fetchMotive();
   }, [fetchMotive]);
+
+  // Load existing memory to update banner
+  useEffect(() => {
+    if (!id) return;
+    getMyMemory(id).then(res => setMyMemory(res.memory)).catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     if (!motive || !session?.user?.id) return;
@@ -329,7 +336,7 @@ export default function MotiveDetailScreen() {
                   onPress={() => router.push(`/(app)/(tabs)/motives/${motive.id}/edit` as any)}
                   style={styles.organiserBtn}
                 >
-                  <Text style={styles.organiserBtnText}>Edit</Text>
+                  <Text style={styles.organiserBtnText}>Edit motive</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={async () => {
@@ -428,13 +435,26 @@ export default function MotiveDetailScreen() {
               style={styles.memoryBanner}
             >
               <View style={styles.memoryIcon}>
-                <Text style={styles.memoryIconText}>M</Text>
+                <Text style={styles.memoryIconText}>📸</Text>
               </View>
               <View style={styles.memoryInfo}>
-                <Text style={styles.memoryTitle}>Add your memories</Text>
-                <Text style={styles.memorySubtitle} numberOfLines={1}>
-                  From {motive.title}
-                </Text>
+                {myMemory ? (
+                  <>
+                    <Text style={styles.memoryTitle}>Your memories</Text>
+                    <Text style={styles.memorySubtitle} numberOfLines={1}>
+                      {myMemory.photos.length} photo{myMemory.photos.length !== 1 ? 's' : ''}
+                      {myMemory.rating ? ` · ${'★'.repeat(myMemory.rating)}` : ''}
+                      {myMemory.vibeTags.length > 0 ? ` · ${myMemory.vibeTags[0]}` : ''}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.memoryTitle}>Add your memories</Text>
+                    <Text style={styles.memorySubtitle} numberOfLines={1}>
+                      From {motive.title}
+                    </Text>
+                  </>
+                )}
               </View>
               <Text style={styles.memoryArrow}>›</Text>
             </Pressable>
@@ -571,20 +591,21 @@ const styles = StyleSheet.create({
   },
   heroDate: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 13,
-    color: C.textSecondary,
+    fontSize: 15,
+    color: C.text,
     marginTop: 10,
+    letterSpacing: -0.2,
   },
   heroVenueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 4,
+    marginTop: 5,
   },
   heroAddress: {
     fontFamily: Fonts.body,
-    fontSize: 12,
-    color: C.textTertiary,
+    fontSize: 13,
+    color: C.textSecondary,
     flex: 1,
   },
   heroNote: {
@@ -650,38 +671,36 @@ const styles = StyleSheet.create({
   },
   // Organiser actions
   organiserRow: {
-    flexDirection: 'row',
     gap: 10,
   },
   organiserBtn: {
-    flex: 1,
-    height: 48,
+    height: 52,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.surface,
+    backgroundColor: C.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   organiserBtnText: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 14,
-    color: C.text,
+    fontSize: 15,
+    color: '#fff',
   },
   cancelBtn: {
-    flex: 1,
-    height: 48,
+    height: 44,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(230,57,70,0.3)',
-    backgroundColor: 'rgba(230,57,70,0.04)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtnText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 14,
+    fontFamily: Fonts.body,
+    fontSize: 13,
     color: C.error,
+    opacity: 0.7,
   },
   // Confirmation prompt
   confirmBanner: {
@@ -756,10 +775,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   memoryIconText: {
-    fontFamily: Fonts.headingRegular,
-    fontStyle: 'italic',
-    fontSize: 18,
-    color: C.textInverse,
+    fontSize: 20,
   },
   memoryInfo: {
     flex: 1,

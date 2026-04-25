@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Modal, Share, RefreshControl, Platform, Alert, Image,
+  Modal, Share, RefreshControl, Platform, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { authClient } from '../../../../lib/auth';
@@ -146,7 +147,13 @@ export default function ProfileScreen() {
             )}
           </View>
           <View style={styles.avatarBlock}>
-            <View style={styles.avatar}><Text style={{ fontSize: 28 }}>👤</Text></View>
+            <Avatar
+              name={displayName}
+              userId={user?.id}
+              uri={user?.image}
+              size="xl"
+              style={styles.avatar}
+            />
             <TouchableOpacity style={styles.qrBtn} onPress={() => setShowQR(true)} activeOpacity={0.8}>
               <Text style={styles.qrIcon}>⊞</Text>
               <Text style={styles.qrLabel}>QR</Text>
@@ -213,17 +220,18 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           ) : (
             <View style={styles.avatarStrip}>
-              {connections.map((conn, i) => {
-                const avatarBgs = ['#FFE4D0', '#D0EDDF', '#D0DFED', '#F0ECE8'];
-                return (
-                  <View key={conn.id} style={[styles.connAvatar, i > 0 && { marginLeft: -6 }]}>
-                    <View style={[styles.connAvatarCircle, { backgroundColor: avatarBgs[i % avatarBgs.length] }]}>
-                      <Text style={{ fontSize: 18 }}>👤</Text>
-                    </View>
-                    <Text style={styles.connName}>{conn.name?.split(' ')[0]}</Text>
-                  </View>
-                );
-              })}
+              {connections.map((conn, i) => (
+                <View key={conn.id} style={[styles.connAvatar, i > 0 && { marginLeft: -6 }]}>
+                  <Avatar
+                    name={conn.name}
+                    userId={conn.id}
+                    uri={(conn as any).image}
+                    size="lg"
+                    style={styles.connAvatarCircle}
+                  />
+                  <Text style={styles.connName}>{conn.name?.split(' ')[0]}</Text>
+                </View>
+              ))}
               {(stats?.connections ?? 0) > 4 && (
                 <View style={[styles.connAvatar, { marginLeft: -6 }]}>
                   <View style={[styles.connAvatarCircle, { backgroundColor: '#F0ECE8' }]}>
@@ -257,9 +265,9 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.circlesPills}>
               {circles.map(ci => (
-                <View key={ci.id} style={[styles.circlePill, { backgroundColor: ci.categoryColor }]}>
+                <View key={ci.id} style={[styles.circlePill, { backgroundColor: ci.categoryColor + '18', borderColor: ci.categoryColor + '55' }]}>
                   <Text style={styles.circlePillEmoji}>{ci.categoryEmoji}</Text>
-                  <Text style={styles.circlePillName}>{ci.name}</Text>
+                  <Text style={[styles.circlePillName, { color: ci.categoryColor }]}>{ci.name}</Text>
                 </View>
               ))}
             </View>
@@ -269,17 +277,17 @@ export default function ProfileScreen() {
         {/* Settings block */}
         <View style={styles.settingsBlock}>
           <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/(app)/(tabs)/profile/edit' as any)}>
-            <Text style={styles.settingsIcon}>✏️</Text>
+            <MaterialIcons name="edit" size={20} color={C.textSecondary} />
             <Text style={styles.settingsLabel}>Edit profile</Text>
-            <Text style={styles.settingsArrow}>›</Text>
+            <MaterialIcons name="chevron-right" size={20} color={C.textTertiary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/(app)/(tabs)/profile/settings' as any)}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
+            <MaterialIcons name="tune" size={20} color={C.textSecondary} />
             <Text style={styles.settingsLabel}>Settings</Text>
-            <Text style={styles.settingsArrow}>›</Text>
+            <MaterialIcons name="chevron-right" size={20} color={C.textTertiary} />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.settingsRow, { borderBottomWidth: 0 }]} onPress={async () => { await authClient.signOut(); router.replace('/(auth)/welcome'); }}>
-            <Text style={styles.settingsIcon}>🚪</Text>
+            <MaterialIcons name="logout" size={20} color={C.error} />
             <Text style={[styles.settingsLabel, { color: C.error }]}>Sign out</Text>
           </TouchableOpacity>
         </View>
@@ -501,12 +509,6 @@ const styles = StyleSheet.create({
   },
   avatarBlock: { alignItems: 'center', gap: 8 },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#ffe8dc',
-    alignItems: 'center',
-    justifyContent: 'center',
     shadowColor: '#FF6B35',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
@@ -613,11 +615,6 @@ const styles = StyleSheet.create({
   avatarStrip: { flexDirection: 'row', alignItems: 'flex-end' },
   connAvatar: { alignItems: 'center', width: 56 },
   connAvatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
     shadowColor: C.cardShadowColor,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
@@ -677,7 +674,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: C.borderWarm,
   },
-  settingsIcon: { fontSize: 18 },
   settingsLabel: {
     fontFamily: Fonts.body,
     fontSize: 14,
@@ -685,7 +681,6 @@ const styles = StyleSheet.create({
     color: C.text,
     letterSpacing: -0.1,
   },
-  settingsArrow: { fontSize: 18, color: C.textTertiary },
 
   // ── QR modal (stays dark) ──
   qrModal: { flex: 1, backgroundColor: '#111111' },

@@ -88,7 +88,7 @@ export function CirclesSection({ circles, loading }: Props) {
                 onPress={() => handleJoin(circle)}
                 disabled={isJoining}
               >
-                <Text style={styles.joinText}>
+                <Text style={[styles.joinText, isJoining && { color: C.primary }]}>
                   {isJoining ? '…' : (circle.requiresApproval ? 'Request' : 'Join')}
                 </Text>
               </TouchableOpacity>
@@ -161,10 +161,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   title: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 13,
+    fontFamily: Fonts.headingRegular,
+    fontSize: 17,
     color: C.text,
-    letterSpacing: -0.1,
+    fontStyle: 'italic',
+    letterSpacing: -0.2,
   },
   seeMore: {
     fontFamily: Fonts.bodySemiBold,
@@ -205,20 +206,27 @@ const styles = StyleSheet.create({
     fontSize: 11, color: C.textTertiary, marginTop: 2,
   },
   joinBtn: {
-    backgroundColor: C.text,
+    backgroundColor: C.primary,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 9,
     flexShrink: 0,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   joinBtnPending: {
-    backgroundColor: 'rgba(45,106,79,0.1)',
+    backgroundColor: 'rgba(255,107,53,0.12)',
+    shadowOpacity: 0,
+    elevation: 0,
     borderWidth: 1,
-    borderColor: 'rgba(45,106,79,0.25)',
+    borderColor: 'rgba(255,107,53,0.3)',
   },
   joinText: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 12, color: C.textInverse,
+    fontSize: 12, color: '#fff',
   },
 
   // See more row
@@ -309,13 +317,17 @@ const styles = StyleSheet.create({
     fontSize: 12, color: 'rgba(242,232,220,0.65)', flex: 1, lineHeight: 18,
   },
   confirmCta: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 14, padding: 14,
+    backgroundColor: C.primary,
+    borderRadius: 14, padding: 16,
     width: '100%', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
   },
   confirmCtaText: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 13, color: 'rgba(242,232,220,0.4)',
+    fontSize: 15, color: '#fff',
   },
 });
