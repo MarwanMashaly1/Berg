@@ -1,0 +1,16 @@
+{
+  "name": "berg",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "mobile": "cd apps/mobile && npx expo start",
+    "api": "cd packages/api && npx tsx src/index.ts"
+  },
+  "devDependencies": {
+    "turbo": "2.9.5"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
