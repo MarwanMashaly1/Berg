@@ -8,7 +8,8 @@ export const posthog = new PostHog(
       autocapture: {
         uncaughtExceptions: true,
         unhandledRejections: true,
-        console: ['error', 'warn'],
+        // console interception intentionally omitted — it suppresses React Native's
+        // error overlay and makes debugging impossible (white screen instead of red screen)
       },
     },
   },
