@@ -1,0 +1,21 @@
+# Dependencies (reinstalled inside container)
+**/node_modules
+
+# Build artifacts
+**/dist
+
+# Environment files (injected via docker-compose env_file)
+**/.env
+**/.env.*
+!**/.env.*.template
+
+# Git
+.git
+.gitignore
+
+# Mobile app (not needed for API build)
+apps/
+
+# Logs and temp
+*.log
+.turbo

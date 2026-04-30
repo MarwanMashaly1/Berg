@@ -51,6 +51,9 @@ app.use(
 );
 
 // â”€â”€â”€ Session middleware â€” MUST run before route handlers that need auth â”€â”€â”€â”€â”€â”€
+// Health check — no auth, used by UptimeRobot to keep the server alive
+app.get('/health', (c) => c.json({ ok: true }));
+
 app.use('/api/*', sessionMiddleware);
 
 // â”€â”€â”€ Custom routes BEFORE BetterAuth (prevents /api/auth/* wildcard stealing them) â”€â”€

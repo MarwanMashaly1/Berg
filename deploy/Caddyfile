@@ -1,0 +1,23 @@
+YOUR_DOMAIN {
+    reverse_proxy localhost:3000
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        -Server
+    }
+
+    # Compress responses
+    encode gzip
+
+    # Log to file
+    log {
+        output file /var/log/caddy/berg-api.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+        format json
+    }
+}

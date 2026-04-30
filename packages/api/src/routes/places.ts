@@ -101,10 +101,14 @@ placesRoutes.get('/nearby', async (c) => {
   }
 
   try {
-    const res = await placesRequest(
-      'https://places.googleapis.com/v1/places:searchNearby',
-      key,
-      {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.shortFormattedAddress,places.location,places.rating,places.userRatingCount,places.currentOpeningHours',
+      },
+      body: JSON.stringify({
         includedTypes: [type],
         maxResultCount: 5,
         rankPreference: 'POPULARITY',
@@ -114,8 +118,8 @@ placesRoutes.get('/nearby', async (c) => {
             radius: 2000.0,
           },
         },
-      },
-    );
+      }),
+    });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({})) as { error?: { message?: string; status?: string } };
