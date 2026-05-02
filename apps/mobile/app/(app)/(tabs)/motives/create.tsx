@@ -625,6 +625,24 @@ function DatePickerModal({
   );
 }
 
+// ─── Distance formatting (client-side) ───────────────────────────────────────
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDist(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
 // ─── PlacePicker — location search with Google Places ────────────────────────
 //
 // State machine:
@@ -660,18 +678,27 @@ function PlacePicker({
     return sessionTokenRef.current;
   }
 
-  // Request location permission and load nearby on mount
+  // Request location permission and load nearby on mount.
+  // getLastKnownPositionAsync is instant (cached GPS) — seeds nearby immediately.
+  // getCurrentPositionAsync then refreshes with a live fix in the background.
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       const granted = status === 'granted';
       setLocationGranted(granted);
+      if (!granted) return;
 
-      if (granted) {
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setUserLat(pos.coords.latitude);
-        setUserLng(pos.coords.longitude);
+      // Instant: use last cached position to show nearby right away
+      const last = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
+      if (last) {
+        setUserLat(last.coords.latitude);
+        setUserLng(last.coords.longitude);
       }
+
+      // Background: freshen with a live fix (updates nearby silently if moved)
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setUserLat(pos.coords.latitude);
+      setUserLng(pos.coords.longitude);
     })();
   }, []);
 
@@ -750,6 +777,11 @@ function PlacePicker({
 
   // ── Selected state — show place card ──
   if (value) {
+    const selectedDist =
+      userLat !== null && userLng !== null && value.lat && value.lng
+        ? formatDist(haversineKm(userLat, userLng, value.lat, value.lng))
+        : null;
+
     return (
       <View style={ppStyles.selectedCard}>
         <View style={ppStyles.selectedInfo}>
@@ -757,13 +789,17 @@ function PlacePicker({
           {value.address ? (
             <Text style={ppStyles.selectedAddr} numberOfLines={1}>{value.address}</Text>
           ) : null}
-          {value.rating ? (
-            <View style={ppStyles.ratingRow}>
-              {/* SVG-style stars: just text chars for now */}
-              <Text style={ppStyles.ratingStars}>{'★'.repeat(Math.round(value.rating))}{'☆'.repeat(5 - Math.round(value.rating))}</Text>
-              <Text style={ppStyles.ratingNum}>{value.rating.toFixed(1)}</Text>
-            </View>
-          ) : null}
+          <View style={ppStyles.selectedMeta}>
+            {value.rating ? (
+              <View style={ppStyles.ratingRow}>
+                <Text style={ppStyles.ratingStars}>{'★'.repeat(Math.round(value.rating))}{'☆'.repeat(5 - Math.round(value.rating))}</Text>
+                <Text style={ppStyles.ratingNum}>{value.rating.toFixed(1)}</Text>
+              </View>
+            ) : null}
+            {selectedDist && (
+              <Text style={ppStyles.selectedDistText}>{selectedDist} away</Text>
+            )}
+          </View>
         </View>
         <View style={ppStyles.checkBadge}>
           <View style={ppStyles.checkmark} />
@@ -849,7 +885,7 @@ function PlacePicker({
               </View>
               <View style={ppStyles.placeMeta}>
                 {place.distanceKm != null && (
-                  <Text style={ppStyles.placeDist}>{place.distanceKm} km</Text>
+                  <Text style={ppStyles.placeDist}>{formatDist(place.distanceKm)}</Text>
                 )}
                 {place.isOpen != null && (
                   <Text style={[ppStyles.placeOpen, !place.isOpen && ppStyles.placeClosed]}>
@@ -973,7 +1009,9 @@ const ppStyles = StyleSheet.create({
     color: C.text, marginBottom: 2,
   },
   selectedAddr: { fontFamily: Fonts.body, fontSize: 11, color: C.textSecondary },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  selectedMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 3 },
+  selectedDistText: { fontFamily: Fonts.body, fontSize: 11, color: C.primary },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ratingStars: { fontSize: 11, color: '#F5A623', letterSpacing: 1 },
   ratingNum: { fontFamily: Fonts.body, fontSize: 11, color: C.textTertiary },
   // Green check badge

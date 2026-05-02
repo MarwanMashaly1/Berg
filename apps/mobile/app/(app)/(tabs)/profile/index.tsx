@@ -265,7 +265,7 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.circlesPills}>
               {circles.map(ci => (
-                <View key={ci.id} style={[styles.circlePill, { backgroundColor: ci.categoryColor + '18', borderColor: ci.categoryColor + '55' }]}>
+                <View key={ci.id} style={[styles.circlePill, { backgroundColor: ci.categoryColor + '28', borderColor: ci.categoryColor + 'BB' }]}>
                   <Text style={styles.circlePillEmoji}>{ci.categoryEmoji}</Text>
                   <Text style={[styles.circlePillName, { color: ci.categoryColor }]}>{ci.name}</Text>
                 </View>
@@ -640,22 +640,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderRadius: 13,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    backgroundColor: C.surface,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: C.borderWarm,
-    shadowColor: C.cardShadowColor,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 1,
   },
   circlePillEmoji: { fontSize: 15 },
   circlePillName: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 12,
-    color: C.text,
+    fontFamily: Fonts.bodyBold,
+    fontSize: 13,
   },
 
   // ── Settings block ──
