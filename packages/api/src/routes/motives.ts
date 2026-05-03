@@ -84,7 +84,7 @@ async function ensureMotiveChat(motiveId: string, title: string, attendeeUserIds
   return chat.id;
 }
 
-// â”€â”€â”€ POST /api/motives â€” Create motive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- POST /api/motives -- Create motive ---------------------------------------
 motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
   const me = c.get('user')!;
 
@@ -152,7 +152,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
     rsvpStatus: 'joined',
   });
 
-  // Insert invited users as attendees â€” filter to only real user IDs first
+  // Insert invited users as attendees -- filter to only real user IDs first
   if (invitedUserIds.length > 0) {
     const existingUsers = await db
       .select({ id: users.id })
@@ -171,14 +171,14 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
     }
   }
 
-  // N1 â€” Motive invite push notifications
+  // N1 -- Motive invite push notifications
   if (invitedUserIds.length > 0 && status !== 'draft') {
     const eligible = await filterByPreference(invitedUserIds, 'notifyMotiveInvites');
     if (eligible.length > 0) {
       const [creator] = await db.select({ name: users.name }).from(users).where(eq(users.id, me.id)).limit(1);
       void sendPushBatch(eligible, {
         title: creator?.name ?? 'Someone',
-        body: `invited you â€” ${title}`,
+        body: `invited you -- ${title}`,
         data: { screen: 'motives', motiveId: motive.id },
       }).catch(() => {});
     }
@@ -201,7 +201,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
     await ensureMotiveChat(motive.id, title, allIds);
   }
 
-  // Invalidate profile stats â€” motive count changed
+  // Invalidate profile stats -- motive count changed
   cache.del(CK.stats(me.id));
 
   posthog.capture({
@@ -221,7 +221,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
   return c.json({ id: motive.id }, 201);
 });
 
-// â”€â”€â”€ GET /api/motives â€” List user's motives â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- GET /api/motives -- List user's motives -----------------------------------
 motivesRoutes.get('/', async (c) => {
   const me = c.get('user')!;
   const filter = c.req.query('filter') ?? 'all';
@@ -322,7 +322,7 @@ motivesRoutes.get('/', async (c) => {
   return c.json({ motives: result });
 });
 
-// â”€â”€â”€ GET /api/motives/:id â€” Motive detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- GET /api/motives/:id -- Motive detail -------------------------------------
 motivesRoutes.get('/:id', async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
@@ -362,7 +362,7 @@ motivesRoutes.get('/:id', async (c) => {
     .innerJoin(users, eq(users.id, motiveAttendees.userId))
     .where(eq(motiveAttendees.motiveId, motiveId));
 
-  // Basic activity feed â€” last 5 attendees who responded (status changes)
+  // Basic activity feed -- last 5 attendees who responded (status changes)
   const activityFeed = attendees
     .filter((a) => a.respondedAt !== null)
     .sort((a, b) => {
@@ -381,7 +381,7 @@ motivesRoutes.get('/:id', async (c) => {
   return c.json({ motive, attendees, activityFeed });
 });
 
-// â”€â”€â”€ PATCH /api/motives/:id â€” Update motive (creator only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- PATCH /api/motives/:id -- Update motive (creator only) -------------------
 motivesRoutes.patch('/:id', zValidator('json', updateMotiveSchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
@@ -442,7 +442,7 @@ motivesRoutes.patch('/:id', zValidator('json', updateMotiveSchema), async (c) =>
   return c.json({ ok: true });
 });
 
-// â”€â”€â”€ DELETE /api/motives/:id â€” Soft delete (creator only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- DELETE /api/motives/:id -- Soft delete (creator only) --------------------
 motivesRoutes.delete('/:id', async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
@@ -466,7 +466,7 @@ motivesRoutes.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// â”€â”€â”€ POST /api/motives/:id/rsvp â€” RSVP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- POST /api/motives/:id/rsvp -- RSVP ---------------------------------------
 motivesRoutes.post('/:id/rsvp', async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
@@ -508,7 +508,7 @@ motivesRoutes.post('/:id/rsvp', async (c) => {
     .set({ rsvpStatus, respondedAt: new Date() })
     .where(and(eq(motiveAttendees.motiveId, motiveId), eq(motiveAttendees.userId, me.id)));
 
-  // N2 â€” RSVP response push to creator
+  // N2 -- RSVP response push to creator
   if (motiveRow.creatorId !== me.id) {
     const verb: Record<string, string> = { going: 'is going', maybe: 'might come', declined: "can't make it" };
     void sendPush(motiveRow.creatorId, {
@@ -521,7 +521,7 @@ motivesRoutes.post('/:id/rsvp', async (c) => {
   return c.json({ ok: true });
 });
 
-// â”€â”€â”€ POST /api/motives/:id/confirm â€” Confirm whether motive happened â”€â”€â”€â”€â”€â”€â”€â”€
+// --- POST /api/motives/:id/confirm -- Confirm whether motive happened --------
 // Called when the user taps "Yes it happened" or "No it was cancelled"
 // in the post-motive confirmation prompt.
 motivesRoutes.post('/:id/confirm', async (c) => {
@@ -557,7 +557,7 @@ motivesRoutes.post('/:id/confirm', async (c) => {
   return c.json({ ok: true, status: newStatus });
 });
 
-// â”€â”€â”€ POST /api/motives/:id/invite â€” Invite users post-creation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- POST /api/motives/:id/invite -- Invite users post-creation ---------------
 motivesRoutes.post('/:id/invite', async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
@@ -614,7 +614,7 @@ motivesRoutes.post('/:id/invite', async (c) => {
   return c.json({ ok: true });
 });
 
-// â”€â”€â”€ POST /api/motives/:id/memory â€” Save memory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- POST /api/motives/:id/memory -- Save memory -------------------------------
 motivesRoutes.post('/:id/memory', zValidator('json', memorySchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
@@ -680,7 +680,7 @@ motivesRoutes.post('/:id/memory', zValidator('json', memorySchema), async (c) =>
   return c.json({ ok: true });
 });
 
-// â”€â”€â”€ GET /api/motives/:id/memory â€” Get memory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- GET /api/motives/:id/memory -- Get memory --------------------------------
 motivesRoutes.get('/:id/memory', async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');

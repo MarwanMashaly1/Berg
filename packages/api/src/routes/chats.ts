@@ -22,7 +22,7 @@ type Variables = {
 export const chatsRoutes = new Hono<{ Variables: Variables }>();
 chatsRoutes.use('*', requireAuth);
 
-// â”€â”€ Helper: assert caller is a member of the chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Helper: assert caller is a member of the chat ----------------------------
 async function assertMember(chatId: string, userId: string) {
   const [row] = await db
     .select({ chatId: chatMembers.chatId })
@@ -32,7 +32,7 @@ async function assertMember(chatId: string, userId: string) {
   return !!row;
 }
 
-// â”€â”€ GET /api/chats â€” list all chats for current user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- GET /api/chats -- list all chats for current user -------------------------
 chatsRoutes.get('/', async (c) => {
   const me = c.get('user')!;
 
@@ -139,7 +139,7 @@ chatsRoutes.get('/', async (c) => {
   return c.json({ chats: enriched });
 });
 
-// â”€â”€ POST /api/chats/groups â€” create a personal group chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- POST /api/chats/groups -- create a personal group chat --------------------
 // MUST be registered before /:id routes
 chatsRoutes.post('/groups', async (c) => {
   const me = c.get('user')!;
@@ -161,7 +161,7 @@ chatsRoutes.post('/groups', async (c) => {
   return c.json({ id: chat.id }, 201);
 });
 
-// â”€â”€ GET /api/chats/:id â€” chat info + members â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- GET /api/chats/:id -- chat info + members ---------------------------------
 chatsRoutes.get('/:id', async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
@@ -182,7 +182,7 @@ chatsRoutes.get('/:id', async (c) => {
   return c.json({ chat, members });
 });
 
-// â”€â”€ GET /api/chats/:id/messages â€” paginated messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- GET /api/chats/:id/messages -- paginated messages -------------------------
 chatsRoutes.get('/:id/messages', async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
@@ -229,7 +229,7 @@ chatsRoutes.get('/:id/messages', async (c) => {
   return c.json({ messages: rows.reverse(), hasMore: rows.length === limit });
 });
 
-// â”€â”€ POST /api/chats/:id/messages â€” send a message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- POST /api/chats/:id/messages -- send a message ----------------------------
 chatsRoutes.post('/:id/messages', async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
@@ -283,7 +283,7 @@ chatsRoutes.post('/:id/messages', async (c) => {
     .set({ lastReadAt: new Date() })
     .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, me.id)));
 
-  // N7 â€” New chat message push to all other members
+  // N7 -- New chat message push to all other members
   if (type !== 'system') {
     const [allMembers, chatRow] = await Promise.all([
       db.select({ userId: chatMembers.userId }).from(chatMembers).where(eq(chatMembers.chatId, chatId)),
@@ -292,7 +292,7 @@ chatsRoutes.post('/:id/messages', async (c) => {
     const otherMembers = allMembers.filter((m) => m.userId !== me.id).map((m) => m.userId);
     if (otherMembers.length > 0 && chatRow[0]) {
       const chat = chatRow[0];
-      const preview = content.length > 60 ? content.slice(0, 57) + 'â€¦' : content;
+      const preview = content.length > 60 ? content.slice(0, 57) + '...' : content;
       const isGroup = chat.type === 'group';
       void sendPushBatch(otherMembers, {
         title: isGroup ? (chat.name ?? 'Group') : (me.name ?? 'Someone'),
@@ -305,7 +305,7 @@ chatsRoutes.post('/:id/messages', async (c) => {
   return c.json({ message: { ...msg, senderName: me.name, senderImage: me.image } }, 201);
 });
 
-// â”€â”€ PATCH /api/chats/:id â€” rename a group chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- PATCH /api/chats/:id -- rename a group chat -------------------------------
 chatsRoutes.patch('/:id', async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
@@ -324,7 +324,7 @@ chatsRoutes.patch('/:id', async (c) => {
   return c.json({ ok: true, name: name.trim() });
 });
 
-// â”€â”€ POST /api/chats/:id/upload-url â€” signed URL for a chat image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- POST /api/chats/:id/upload-url -- signed URL for a chat image -------------
 chatsRoutes.post('/:id/upload-url', async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
@@ -343,7 +343,7 @@ chatsRoutes.post('/:id/upload-url', async (c) => {
   const fileId = randomUUID();
   const path = `${chatId}/${fileId}.${ext.replace(/[^a-z0-9]/gi, '')}`;
 
-  // chat-images is a PUBLIC bucket â€” getPublicUrl gives a permanent link
+  // chat-images is a PUBLIC bucket -- getPublicUrl gives a permanent link
   const { data, error } = await supabaseAdmin.storage
     .from(CHAT_IMAGES_BUCKET)
     .createSignedUploadUrl(path);
@@ -353,7 +353,7 @@ chatsRoutes.post('/:id/upload-url', async (c) => {
     return c.json({ error: `could not create upload URL: ${error?.message ?? 'unknown'}` }, 500);
   }
 
-  // Public URL is permanent â€” store it directly as message content
+  // Public URL is permanent -- store it directly as message content
   const { data: { publicUrl } } = supabaseAdmin.storage
     .from(CHAT_IMAGES_BUCKET)
     .getPublicUrl(path);
@@ -361,7 +361,7 @@ chatsRoutes.post('/:id/upload-url', async (c) => {
   return c.json({ uploadUrl: data.signedUrl, token: data.token, path, publicUrl });
 });
 
-// â”€â”€ POST /api/chats/:id/members â€” add members to a group chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- POST /api/chats/:id/members -- add members to a group chat ----------------
 chatsRoutes.post('/:id/members', async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');

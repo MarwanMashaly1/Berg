@@ -6,19 +6,19 @@ import {
 import { and, eq, inArray, notInArray, ne, sql } from 'drizzle-orm';
 
 /**
- * FOF suggestion scoring â€” 5 signals, weighted sum â†’ 0.00â€“1.00
+ * FOF suggestion scoring -- 5 signals, weighted sum -> 0.00-1.00
  *
- * 1. Mutual friends    35% â€” shared confirmed connections (normalised /3)
- * 2. Vibe tag Jaccard  30% â€” intersection/union of tag sets
- * 3. Motive overlap    20% â€” shared motive attendance (normalised /2)
- * 4. Prompt similarity 10% â€” matching optionKey on same prompts
- * 5. Recency            5% â€” linear decay over 30 days since last active
+ * 1. Mutual friends    35% -- shared confirmed connections (normalised /3)
+ * 2. Vibe tag Jaccard  30% -- intersection/union of tag sets
+ * 3. Motive overlap    20% -- shared motive attendance (normalised /2)
+ * 4. Prompt similarity 10% -- matching optionKey on same prompts
+ * 5. Recency            5% -- linear decay over 30 days since last active
  */
 function score(
   myFriendIds: Set<string>,
   myTagIds: Set<string>,
   myMotiveIds: Set<string>,
-  myPromptMap: Map<string, string>,   // promptId â†’ optionKey
+  myPromptMap: Map<string, string>,   // promptId -> optionKey
   candidate: {
     friendIds: Set<string>;
     tagIds: Set<string>;
@@ -55,7 +55,7 @@ function score(
   }
   const promptScore = promptTotal > 0 ? promptMatch / promptTotal : 0;
 
-  // 5. Recency (5%) â€” linear decay to 0 at 30 days
+  // 5. Recency (5%) -- linear decay to 0 at 30 days
   const daysSince = candidate.updatedAt
     ? (Date.now() - candidate.updatedAt.getTime()) / 86_400_000
     : 90;
@@ -75,7 +75,7 @@ function score(
  * Called by the daily cron job and by immediate-trigger jobs.
  */
 export async function recomputeFofForUser(userId: string): Promise<void> {
-  // â”€â”€ 1. Load the user's data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- 1. Load the user's data -----------------------------------------------
 
   // Confirmed friends
   const myFriendRows = await db
@@ -84,7 +84,7 @@ export async function recomputeFofForUser(userId: string): Promise<void> {
     .where(and(eq(circles.userId, userId), eq(circles.status, 'confirmed')));
   const myFriendIds = new Set(myFriendRows.map((r) => r.friendId));
 
-  if (myFriendIds.size === 0) return; // no friends yet â†’ no FOF to compute
+  if (myFriendIds.size === 0) return; // no friends yet -> no FOF to compute
 
   // Blocked users (exclude from suggestions)
   const blockedRows = await db
@@ -119,7 +119,7 @@ export async function recomputeFofForUser(userId: string): Promise<void> {
     .where(eq(promptResponses.userId, userId));
   const myPromptMap = new Map(myPromptRows.map((r) => [r.promptId, r.optionKey ?? '']));
 
-  // â”€â”€ 2. Find FOF candidates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- 2. Find FOF candidates ------------------------------------------------
 
   // Friends of my friends
   const friendIds = [...myFriendIds];
@@ -145,7 +145,7 @@ export async function recomputeFofForUser(userId: string): Promise<void> {
 
   if (candidateIds.length === 0) return;
 
-  // â”€â”€ 3. Load candidate data in bulk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- 3. Load candidate data in bulk ---------------------------------------
 
   // Filter to users who are discoverable and have completed onboarding
   const candidateUsers = await db
@@ -196,7 +196,7 @@ export async function recomputeFofForUser(userId: string): Promise<void> {
       ),
     );
 
-  // â”€â”€ 4. Index data by candidate ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- 4. Index data by candidate ID ----------------------------------------
 
   const candidateTagMap = new Map<string, Set<string>>();
   for (const r of tagRows) {
@@ -226,7 +226,7 @@ export async function recomputeFofForUser(userId: string): Promise<void> {
     candidateUsers.map((u) => [u.id, u.updatedAt]),
   );
 
-  // â”€â”€ 5. Score each candidate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- 5. Score each candidate -----------------------------------------------
 
   const scored: Array<{
     userId: string;
@@ -268,7 +268,7 @@ export async function recomputeFofForUser(userId: string): Promise<void> {
 
   if (top20.length === 0) return;
 
-  // â”€â”€ 6. Upsert into fof_suggestions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- 6. Upsert into fof_suggestions ---------------------------------------
 
   await db
     .insert(fofSuggestions)

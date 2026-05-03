@@ -6,7 +6,7 @@ import { sendPushBatch } from '../lib/notifications.js';
 export type MotiveJobData = { motiveId: string };
 
 /**
- * N12 â€” Memory resurfacing T+14 days
+ * N12 -- Memory resurfacing T+14 days
  * Only fires for users who added a memory with a generated card.
  */
 export async function handleMotiveResurface(job: { data: MotiveJobData }): Promise<void> {

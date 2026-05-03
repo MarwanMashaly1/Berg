@@ -27,7 +27,7 @@ type Variables = {
 
 const app = new Hono<{ Variables: Variables }>();
 
-// â”€â”€â”€ Security headers
+// --- Security headers
 app.use('*', async (c, next) => {
   await next();
   c.header('X-Content-Type-Options', 'nosniff');
@@ -36,14 +36,14 @@ app.use('*', async (c, next) => {
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
 });
 
-// â”€â”€â”€ Request logger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Request logger ----------------------------------------------------------
 app.use('*', async (c, next) => {
-  console.log(`â†’ ${c.req.method} ${c.req.path}`);
+  console.log(`-> ${c.req.method} ${c.req.path}`);
   await next();
-  console.log(`â† ${c.req.method} ${c.req.path} ${c.res.status}`);
+  console.log(`<- ${c.req.method} ${c.req.path} ${c.res.status}`);
 });
 
-// â”€â”€â”€ CORS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- CORS --------------------------------------------------------------------
 app.use(
   '/api/*',
   cors({
@@ -59,13 +59,13 @@ app.use(
   })
 );
 
-// â”€â”€â”€ Session middleware â€” MUST run before route handlers that need auth â”€â”€â”€â”€â”€â”€
+// --- Session middleware -- MUST run before route handlers that need auth ------
 // Health check — no auth, used by UptimeRobot to keep the server alive
 app.get('/health', (c) => c.json({ ok: true }));
 
 app.use('/api/*', sessionMiddleware);
 
-// â”€â”€â”€ Custom routes BEFORE BetterAuth (prevents /api/auth/* wildcard stealing them) â”€â”€
+// --- Custom routes BEFORE BetterAuth (prevents /api/auth/* wildcard stealing them) --
 app.route('/api/phone', phoneRoutes);
 app.route('/api/auth/verify-code', verifyCodeRoutes);
 app.route('/api/users', userRoutes);
@@ -81,7 +81,7 @@ app.route('/api/places', placesRoutes);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/admin', adminRoutes);
 
-// â”€â”€â”€ BetterAuth handler â€” catches all remaining /api/auth/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- BetterAuth handler -- catches all remaining /api/auth/* ------------------
 app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
   const timeout = new Promise<Response>((_, reject) =>
     setTimeout(() => reject(new Error('BetterAuth timed out after 8s')), 8000)
@@ -90,11 +90,11 @@ app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
     const res = await Promise.race([auth.handler(c.req.raw), timeout]) as Response;
     if (res.status !== 200) {
       const body = await res.clone().text();
-      console.error(`ðŸ”´ BetterAuth ${c.req.path} â†’ ${res.status}:`, body);
+      console.error(`🔴 BetterAuth ${c.req.path} -> ${res.status}:`, body);
     }
     return res;
   } catch (err) {
-    console.error('ðŸ”´ Auth handler error:', err);
+    console.error('🔴 Auth handler error:', err);
     return c.json({ error: String(err) }, 500);
   }
 });
@@ -110,7 +110,7 @@ app.onError((err, c) => {
 // Health check
 app.get('/', (c) => c.json({ status: 'Berg API', version: '0.0.1' }));
 
-// â”€â”€â”€ Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Server ------------------------------------------------------------------
 const port = Number(process.env.PORT) || 3000;
 
 serve({ fetch: app.fetch, port }, (info) => {

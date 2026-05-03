@@ -6,13 +6,13 @@ import { eq, and, sql } from 'drizzle-orm';
 const MY_USER_ID = '9xWk2v3c6T2d4Gb7pwjfNiOBjlHZTjIf';
 
 async function main() {
-  console.log('ðŸ” Testing matches for Marwan...');
+  console.log('🔍 Testing matches for Marwan...');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const [prompt] = await db.select().from(dailyPrompts).where(eq(dailyPrompts.activeDate, todayStr)).limit(1);
 
   if (!prompt) {
-    console.error('âŒ No prompt found for today.');
+    console.error('❌ No prompt found for today.');
     process.exit(1);
   }
 
@@ -31,7 +31,7 @@ async function main() {
     .from(promptResponses)
     .where(eq(promptResponses.promptId, prompt.id));
   
-  console.log('\nðŸ” All Raw Responses for this prompt:');
+  console.log('\n🔍 All Raw Responses for this prompt:');
   console.table(allResponses.map(r => ({ userId: r.userId, optionKey: r.optionKey })));
 
   // 1.6. Debug Circles for Marwan
@@ -40,7 +40,7 @@ async function main() {
     .from(circles)
     .where(eq(circles.userId, MY_USER_ID));
   
-  console.log('\nðŸ” Marwan\'s Circles:');
+  console.log('\n🔍 Marwan\'s Circles:');
   console.table(marwanCircles.map(c => ({ friendId: c.friendId, status: c.status })));
 
   // 2. Fetch Matches (Simulating /api/prompts/:id/matches logic)
@@ -64,7 +64,7 @@ async function main() {
     ))
     .limit(20);
 
-  console.log('\nâœ… Circle Matches:');
+  console.log('\n✅ Circle Matches:');
   console.table(matches);
 
   // 3. Fetch Adjacent Matches
@@ -91,7 +91,7 @@ async function main() {
       .limit(5);
   }
 
-  console.log('\nâœ… Adjacent Circle Matches:');
+  console.log('\n✅ Adjacent Circle Matches:');
   console.table(adjacentMatches);
 
   const state = matches.length > 0

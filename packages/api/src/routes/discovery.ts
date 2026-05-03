@@ -22,11 +22,11 @@ type Variables = {
 export const discoveryRoutes = new Hono<{ Variables: Variables }>();
 discoveryRoutes.use('*', requireAuth);
 
-// GET /api/discovery/people â€” FOF suggestions, cached 10 min per user
+// GET /api/discovery/people -- FOF suggestions, cached 10 min per user
 discoveryRoutes.get('/people', async (c) => {
   const me = c.get('user')!;
 
-  // Serve from cache if available â€” FOF is recomputed every 24h
+  // Serve from cache if available -- FOF is recomputed every 24h
   const cached = cache.get<{ people: unknown[] }>(CK.fof(me.id));
   if (cached) {
     c.header('X-Cache', 'HIT');
@@ -47,7 +47,7 @@ discoveryRoutes.get('/people', async (c) => {
     .where(and(eq(circles.userId, me.id), eq(circles.status, 'confirmed')))
   ).map((r) => r.friendId));
 
-  // â”€â”€ Primary: read pre-computed FOF suggestions (DESC = best first, fixes ASC bug) â”€â”€
+  // -- Primary: read pre-computed FOF suggestions (DESC = best first, fixes ASC bug) --
   const fofRows = await db
     .select({
       id: fofSuggestions.suggestedUserId,
@@ -63,7 +63,7 @@ discoveryRoutes.get('/people', async (c) => {
   let suggestionMeta: typeof fofRows = fofRows;
   let userIds: string[] = fofRows.map((s) => s.id);
 
-  // â”€â”€ Fallback: circle members not yet connected (for users with no FOF data) â”€â”€
+  // -- Fallback: circle members not yet connected (for users with no FOF data) --
   if (fofRows.length < 5) {
     const myCircleIds = (await db
       .select({ gcId: groupCircleMembers.groupCircleId })
@@ -107,7 +107,7 @@ discoveryRoutes.get('/people', async (c) => {
 
   if (userIds.length === 0) return c.json({ people: [] });
 
-  // â”€â”€ Fetch user details â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Fetch user details ----------------------------------------------------
   const suggestedUsers = await db
     .select({
       id: users.id,
@@ -118,7 +118,7 @@ discoveryRoutes.get('/people', async (c) => {
     .from(users)
     .where(inArray(users.id, userIds));
 
-  // â”€â”€ Resolve mutual friend names (bulk â€” one query for all) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Resolve mutual friend names (bulk -- one query for all) ----------------
   const allMutualIds = [...new Set(
     suggestionMeta.flatMap((s) => (s.mutualFriendIds ?? []) as string[]),
   )];
@@ -132,7 +132,7 @@ discoveryRoutes.get('/people', async (c) => {
     for (const r of rows) mutualUsers[r.id] = r.name ?? 'a friend';
   }
 
-  // â”€â”€ Shared vibe tags (bulk â€” one query per candidate, batched) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Shared vibe tags (bulk -- one query per candidate, batched) -----------
   const sharedTagsMap: Record<string, Array<{ emoji: string; label: string }>> = {};
   if (myTagIds.length > 0 && userIds.length > 0) {
     const tagRows = await db
@@ -149,7 +149,7 @@ discoveryRoutes.get('/people', async (c) => {
     }
   }
 
-  // â”€â”€ Build response â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Build response --------------------------------------------------------
   const metaById = Object.fromEntries(suggestionMeta.map((s) => [s.id, s]));
 
   const people = suggestedUsers.map((u) => {
@@ -175,7 +175,7 @@ discoveryRoutes.get('/people', async (c) => {
   return c.json(result);
 });
 
-// GET /api/discovery/circles â€” scored suggestions, cached 10 min per user
+// GET /api/discovery/circles -- scored suggestions, cached 10 min per user
 discoveryRoutes.get('/circles', async (c) => {
   const me = c.get('user')!;
 
@@ -240,14 +240,14 @@ discoveryRoutes.get('/circles', async (c) => {
         .where(inArray(userVibeTags.userId, uniqueMemberIds))
     : [];
 
-  // Index: circleId â†’ member IDs
+  // Index: circleId -> member IDs
   const circleMembersMap = new Map<string, string[]>();
   for (const r of allMemberRows) {
     if (!circleMembersMap.has(r.groupCircleId)) circleMembersMap.set(r.groupCircleId, []);
     circleMembersMap.get(r.groupCircleId)!.push(r.userId);
   }
 
-  // Index: userId â†’ Set of tagIds
+  // Index: userId -> Set of tagIds
   const memberTagsMap = new Map<string, Set<string>>();
   for (const r of memberTagRows) {
     if (!memberTagsMap.has(r.userId)) memberTagsMap.set(r.userId, new Set());
@@ -280,20 +280,20 @@ discoveryRoutes.get('/circles', async (c) => {
     const tagScore = memberCount > 0 ? membersWithSharedTag / memberCount : 0;
 
     // 3. Category match (20%): circle emoji matches a category whose tags I have
-    // Use a simple emoji â†’ tag category mapping
+    // Use a simple emoji -> tag category mapping
     const emojiCategoryMap: Record<string, string[]> = {
-      'ðŸ•': ['food', 'foodie'],
+      '🍕': ['food', 'foodie'],
       'ðŸ•': ['outdoor', 'outdoors', 'active'],
-      'â˜•': ['social', 'catchup'],
-      'ðŸŽ¬': ['creative', 'culture'],
+      '☕': ['social', 'catchup'],
+      '🎬': ['creative', 'culture'],
       'ðŸƒ': ['active', 'sport', 'fitness'],
-      'ðŸŽ‰': ['social', 'party'],
-      'ðŸŽ®': ['gaming', 'tech'],
-      'âœˆï¸': ['travel', 'adventure'],
-      'ðŸŽ¨': ['creative', 'art'],
-      'ðŸ’»': ['tech', 'professional'],
-      'ðŸ“š': ['intellectual', 'learning'],
-      'ðŸŽµ': ['music', 'creative'],
+      '🎉': ['social', 'party'],
+      '🎮': ['gaming', 'tech'],
+      '✈️': ['travel', 'adventure'],
+      '🎨': ['creative', 'art'],
+      '💻': ['tech', 'professional'],
+      '📚': ['intellectual', 'learning'],
+      '🎵': ['music', 'creative'],
     };
     // For simplicity in Phase 1: category match = 1 if circle has any friends inside
     // (proxy: if friends joined this category, it's likely relevant)
@@ -322,7 +322,7 @@ discoveryRoutes.get('/circles', async (c) => {
   return c.json(circleResult);
 });
 
-// GET /api/discovery/pulse â€” real cards based on live data
+// GET /api/discovery/pulse -- real cards based on live data
 discoveryRoutes.get('/pulse', async (c) => {
   const me = c.get('user')!;
   const today = new Date().toISOString().split('T')[0];
@@ -331,7 +331,7 @@ discoveryRoutes.get('/pulse', async (c) => {
     actionTarget: { type: string; id: string };
   }> = [];
 
-  // Card 1: prompt participation â€” how many circle friends answered today
+  // Card 1: prompt participation -- how many circle friends answered today
   const [todayPrompt] = await db
     .select({ id: dailyPrompts.id })
     .from(dailyPrompts)
@@ -365,7 +365,7 @@ discoveryRoutes.get('/pulse', async (c) => {
         cards.push({
           type: 'prompt_participation',
           text: `${respondedFriends.length} people in your circle answered today's prompt`,
-          emoji: 'ðŸ”¥',
+          emoji: '🔥',
           actionLabel: 'See who agreed',
           actionTarget: { type: 'prompt_reveal', id: todayPrompt.id },
         });
@@ -373,7 +373,7 @@ discoveryRoutes.get('/pulse', async (c) => {
     }
   }
 
-  // Card 2: new circle member â€” someone in your circle joined a group recently
+  // Card 2: new circle member -- someone in your circle joined a group recently
   const myFriendIdsFull = (await db
     .select({ friendId: circles.friendId })
     .from(circles)
@@ -403,7 +403,7 @@ discoveryRoutes.get('/pulse', async (c) => {
       cards.push({
         type: 'new_circle_member',
         text: `${r.userName?.split(' ')[0]} joined ${r.circleName}`,
-        emoji: 'ðŸ‘¥',
+        emoji: '👥',
         actionLabel: 'Check it out',
         actionTarget: { type: 'circle', id: r.circleId },
       });
@@ -413,11 +413,11 @@ discoveryRoutes.get('/pulse', async (c) => {
   return c.json({ cards: cards.slice(0, 3) });
 });
 
-// â”€â”€â”€ Separate router mounted at /api/circles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Separate router mounted at /api/circles ---------------------------------
 export const circlesRoutes = new Hono<{ Variables: Variables }>();
 circlesRoutes.use('*', requireAuth);
 
-// POST /api/circles â€” Create a new group circle
+// POST /api/circles -- Create a new group circle
 circlesRoutes.post('/', async (c) => {
   const me = c.get('user')!;
 
@@ -459,7 +459,7 @@ circlesRoutes.post('/', async (c) => {
         joinCode,
         requiresApproval: body.requiresApproval ?? false,
         isPublic: body.isPublic ?? true,
-        categoryEmoji: body.categoryEmoji ?? 'ðŸ‘¥',
+        categoryEmoji: body.categoryEmoji ?? '👥',
         categoryColor: body.categoryColor ?? '#e8f0fe',
         createdAt: new Date(),
       })
@@ -473,7 +473,7 @@ circlesRoutes.post('/', async (c) => {
       joinedAt: new Date(),
     });
 
-    // Auto-create a group chat for this circle â€” every circle gets a chat
+    // Auto-create a group chat for this circle -- every circle gets a chat
     const [chat] = await db
       .insert(chats)
       .values({
@@ -518,7 +518,7 @@ circlesRoutes.post('/:id/join', async (c) => {
     .values({ groupCircleId: circleId, userId: me.id, status, joinedAt: new Date() })
     .onConflictDoNothing();
 
-  // N5 â€” Circle join request push to admin (only when approval is required)
+  // N5 -- Circle join request push to admin (only when approval is required)
   if (circle.requiresApproval) {
     const eligible = await filterByPreference([circle.adminUserId], 'notifyCircleRequests');
     if (eligible.length > 0) {
@@ -540,14 +540,14 @@ circlesRoutes.post('/:id/join', async (c) => {
       .limit(1);
 
     if (existingChat) {
-      // Chat already exists â€” add the new member
+      // Chat already exists -- add the new member
       chatId = existingChat.id;
       await db
         .insert(chatMembers)
         .values({ chatId, userId: me.id, joinedAt: new Date() })
         .onConflictDoNothing();
     } else {
-      // No chat yet â€” create one and add ALL current active members
+      // No chat yet -- create one and add ALL current active members
       const [newChat] = await db
         .insert(chats)
         .values({
@@ -610,7 +610,7 @@ circlesRoutes.post('/request/:userId', async (c) => {
     id: randomUUID(), userId: me.id, friendId: targetId, status: 'pending', createdAt: new Date(),
   }).onConflictDoNothing();
 
-  // N3 â€” Connection request push
+  // N3 -- Connection request push
   const eligible = await filterByPreference([targetId], 'notifyCircleRequests');
   if (eligible.length > 0) {
     void sendPush(targetId, {
@@ -633,7 +633,7 @@ circlesRoutes.post('/accept/:userId', async (c) => {
     { id: randomUUID(), userId: requesterId, friendId: me.id, status: 'confirmed', createdAt: new Date() },
   ]).onConflictDoNothing();
 
-  // N4 â€” Connection accepted push to the requester
+  // N4 -- Connection accepted push to the requester
   const eligible = await filterByPreference([requesterId], 'notifyCircleRequests');
   if (eligible.length > 0) {
     void sendPush(requesterId, {
@@ -643,7 +643,7 @@ circlesRoutes.post('/accept/:userId', async (c) => {
     }).catch(() => {});
   }
 
-  // Recompute FOF suggestions for both users â€” new connection changes the graph
+  // Recompute FOF suggestions for both users -- new connection changes the graph
   void Promise.all([
     enqueue('discovery/recompute-fof-user', { userId: me.id }),
     enqueue('discovery/recompute-fof-user', { userId: requesterId }),
@@ -666,7 +666,7 @@ circlesRoutes.delete('/decline/:userId', async (c) => {
   return c.json({ ok: true });
 });
 
-// DELETE /api/circles/cancel/:userId â€” cancel a request I sent
+// DELETE /api/circles/cancel/:userId -- cancel a request I sent
 circlesRoutes.delete('/cancel/:userId', async (c) => {
   const me = c.get('user')!;
   const targetId = c.req.param('userId');

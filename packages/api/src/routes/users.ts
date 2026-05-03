@@ -1,10 +1,10 @@
 ﻿import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, or, ilike, ne, and, sql } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'crypto';
 import { db } from '../db.js';
-import { users, userVibeTags, vibeTags, inviteLinks } from '@berg/shared';
+import { users, userVibeTags, vibeTags, inviteLinks, circles } from '@berg/shared';
 import { enqueue } from '../lib/queue.js';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin, AVATARS_BUCKET } from '../lib/supabase-admin.js';
@@ -28,7 +28,7 @@ export const userRoutes = new Hono<{ Variables: Variables }>();
 // All routes require authentication
 userRoutes.use('*', requireAuth);
 
-// GET /api/users/me â€” return current user (explicit projection, no phone data)
+// GET /api/users/me -- return current user (explicit projection, no phone data)
 userRoutes.get('/me', async (c) => {
   const me = c.get('user');
   if (!me) return c.json({ error: 'Unauthorized' }, 401);
@@ -55,12 +55,13 @@ userRoutes.get('/me', async (c) => {
   return c.json({ user: user ?? null });
 });
 
-// PATCH /api/users/me â€” update profile fields + advance onboarding step
+// PATCH /api/users/me -- update profile fields + advance onboarding step
 const patchUserSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   displayName: z.string().min(1).max(100).optional(),
   username: z.string().min(3).max(20).optional(),
   bio: z.string().max(500).optional(),
+  image: z.string().url().optional(),
   availabilityStatus: z.enum(['down_to_hang', 'busy', 'ask_me']).optional(),
   onboardingStep: z.string().optional(),
   onboardingCompleted: z.boolean().optional(),
@@ -80,6 +81,7 @@ userRoutes.patch('/me', zValidator('json', patchUserSchema), async (c) => {
   if (body.displayName !== undefined) updates.displayName = body.displayName;
   if (body.username !== undefined) updates.username = body.username;
   if (body.bio !== undefined) updates.bio = body.bio;
+  if (body.image !== undefined) updates.image = body.image;
   if (body.availabilityStatus !== undefined) updates.availabilityStatus = body.availabilityStatus;
   if (body.onboardingCompleted !== undefined) updates.onboardingCompleted = body.onboardingCompleted;
   if (body.notifyPromptMatches !== undefined) updates.notifyPromptMatches = body.notifyPromptMatches;
@@ -128,7 +130,7 @@ userRoutes.patch('/me', zValidator('json', patchUserSchema), async (c) => {
   return c.json({ user: updated ?? null });
 });
 
-// POST /api/users/me/vibe-tags â€” save selected vibe tags (replaces existing)
+// POST /api/users/me/vibe-tags -- save selected vibe tags (replaces existing)
 userRoutes.post('/me/vibe-tags', zValidator('json', z.object({
   tagIds: z.array(z.string().uuid()).min(3, 'Select at least 3 vibe tags'),
 })), async (c) => {
@@ -151,13 +153,66 @@ userRoutes.post('/me/vibe-tags', zValidator('json', z.object({
     tagIds.map((tagId) => ({ userId: user.id, tagId }))
   );
 
-  // Vibe tags changed â†’ recompute FOF (tag Jaccard is 30% of the score)
+  // Vibe tags changed -> recompute FOF (tag Jaccard is 30% of the score)
   void enqueue('discovery/recompute-fof-user', { userId: user.id }).catch(() => {});
 
   return c.json({ ok: true, count: tagIds.length });
 });
 
-// GET /api/users/me/invite-link â€” get or create a personalised invite link
+// GET /api/users/check-username?username= — check if a username is available
+userRoutes.get('/check-username', async (c) => {
+  const me = c.get('user');
+  const username = c.req.query('username')?.toLowerCase().trim();
+  if (!username || !/^[a-z0-9_]{3,20}$/.test(username)) {
+    return c.json({ available: false, reason: 'invalid' });
+  }
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.username, username), me ? ne(users.id, me.id) : sql`true`))
+    .limit(1);
+  return c.json({ available: existing.length === 0 });
+});
+
+// GET /api/users/search?q= — search users by name or @handle, returns connection status
+userRoutes.get('/search', async (c) => {
+  const me = c.get('user');
+  if (!me) return c.json({ error: 'Unauthorized' }, 401);
+
+  const q = c.req.query('q')?.trim();
+  if (!q || q.length < 2) return c.json({ users: [] });
+
+  const pattern = `%${q.replace(/[%_]/g, '\\$&')}%`;
+
+  const results = await db
+    .select({ id: users.id, name: users.name, username: users.username, image: users.image })
+    .from(users)
+    .where(and(
+      ne(users.id, me.id),
+      or(ilike(users.name, pattern), ilike(users.username, pattern)),
+    ))
+    .limit(20);
+
+  if (results.length === 0) return c.json({ users: [] });
+
+  // Fetch connection status for each result
+  const resultIds = results.map((u) => u.id);
+  const myCircles = await db
+    .select({ friendId: circles.friendId, status: circles.status })
+    .from(circles)
+    .where(and(eq(circles.userId, me.id), inArray(circles.friendId, resultIds)));
+
+  const statusMap = new Map(myCircles.map((c) => [c.friendId, c.status]));
+
+  return c.json({
+    users: results.map((u) => ({
+      ...u,
+      connectionStatus: statusMap.get(u.id) ?? null, // null | 'pending' | 'confirmed'
+    })),
+  });
+});
+
+// GET /api/users/me/invite-link -- get or create a personalised invite link
 userRoutes.get('/me/invite-link', async (c) => {
   const me = c.get('user')!;
   const existing = await db.select().from(inviteLinks).where(eq(inviteLinks.userId, me.id)).limit(1);
@@ -173,7 +228,7 @@ userRoutes.get('/me/invite-link', async (c) => {
   return c.json({ code, url: `https://berg.app/join/${code}` });
 });
 
-// POST /api/users/me/avatar-upload-url â€” get Supabase signed URL to upload a profile photo
+// POST /api/users/me/avatar-upload-url -- get Supabase signed URL to upload a profile photo
 userRoutes.post('/me/avatar-upload-url', async (c) => {
   const me = c.get('user');
   if (!me) return c.json({ error: 'Unauthorized' }, 401);
@@ -197,7 +252,7 @@ userRoutes.post('/me/avatar-upload-url', async (c) => {
     return c.json({ error: 'Unsupported image type' }, 400);
   }
 
-  // Always overwrite the same path â€” one avatar per user
+  // Always overwrite the same path -- one avatar per user
   const path = `${me.id}/avatar.${ext}`;
 
   const { data, error } = await supabaseAdmin.storage
@@ -209,13 +264,13 @@ userRoutes.post('/me/avatar-upload-url', async (c) => {
     return c.json({ error: 'Could not create upload URL' }, 500);
   }
 
-  // Public URL â€” avatars bucket should be public
+  // Public URL -- avatars bucket should be public
   const { data: urlData } = supabaseAdmin.storage.from(AVATARS_BUCKET).getPublicUrl(path);
 
   return c.json({ uploadUrl: data.signedUrl, path, publicUrl: urlData.publicUrl });
 });
 
-// GET /api/users/:userId/public â€” public profile card (for QR scan connection flow)
+// GET /api/users/:userId/public -- public profile card (for QR scan connection flow)
 userRoutes.get('/:userId/public', async (c) => {
   const userId = c.req.param('userId');
   const [user] = await db
@@ -234,7 +289,7 @@ userRoutes.get('/:userId/public', async (c) => {
   return c.json({ user });
 });
 
-// POST /api/users/me/push-token â€” register Expo push token for this device
+// POST /api/users/me/push-token -- register Expo push token for this device
 userRoutes.post('/me/push-token', async (c) => {
   const me = c.get('user');
   if (!me) return c.json({ error: 'Unauthorized' }, 401);

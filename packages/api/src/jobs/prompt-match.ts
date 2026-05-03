@@ -13,8 +13,8 @@ export type PromptMatchData = {
 };
 
 /**
- * N8 â€” First prompt match notification
- * N9 â€” Third prompt match notification
+ * N8 -- First prompt match notification
+ * N9 -- Third prompt match notification
  *
  * Runs every time a user responds to a prompt.
  * Checks how many circle-friends share the same optionKey.
@@ -23,7 +23,7 @@ export type PromptMatchData = {
 export async function handlePromptMatch(job: { data: PromptMatchData }): Promise<void> {
   const { promptId, userId, optionKey } = job.data;
 
-  // 1. Check prompt expiry â€” notifications expire at midnight of the prompt day
+  // 1. Check prompt expiry -- notifications expire at midnight of the prompt day
   const [prompt] = await db
     .select({ activeDate: dailyPrompts.activeDate })
     .from(dailyPrompts)
@@ -83,7 +83,7 @@ export async function handlePromptMatch(job: { data: PromptMatchData }): Promise
   const sent = existing?.notificationsSent ?? 0;
   const expiresAt = promptMidnight;
 
-  // N8 â€” First match
+  // N8 -- First match
   if (matchCount >= 1 && sent === 0) {
     const [firstMatch] = await db
       .select({ name: users.name })
@@ -100,7 +100,7 @@ export async function handlePromptMatch(job: { data: PromptMatchData }): Promise
 
     await sendPush(userId, {
       title: firstMatch?.name ?? 'A friend',
-      body: 'agrees with your take â€” see what they said',
+      body: 'agrees with your take -- see what they said',
       data: { screen: 'discovery' },
     });
 
@@ -114,11 +114,11 @@ export async function handlePromptMatch(job: { data: PromptMatchData }): Promise
     return;
   }
 
-  // N9 â€” Third match
+  // N9 -- Third match
   if (matchCount >= 3 && sent === 1) {
     await sendPush(userId, {
       title: 'Your people agree',
-      body: '3 people in your circle think the same â€” time for a Motive?',
+      body: '3 people in your circle think the same -- time for a Motive?',
       data: { screen: 'discovery' },
     });
 

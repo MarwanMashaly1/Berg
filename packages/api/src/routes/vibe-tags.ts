@@ -11,8 +11,8 @@ type Variables = {
 
 export const vibeTagRoutes = new Hono<{ Variables: Variables }>();
 
-// GET /api/vibe-tags â€” list all vibe tags (public, no auth needed)
-// Cached for 1 hour â€” the tag list never changes in production
+// GET /api/vibe-tags -- list all vibe tags (public, no auth needed)
+// Cached for 1 hour -- the tag list never changes in production
 vibeTagRoutes.get('/', async (c) => {
   const tags = await cache.wrap(
     CK.vibeTags(),

@@ -6,7 +6,7 @@ import { sendPushBatch } from '../lib/notifications.js';
 export type MotiveJobData = { motiveId: string };
 
 /**
- * N10 â€” Motive 2-hour reminder
+ * N10 -- Motive 2-hour reminder
  * Scheduled when a motive is created. Fires 2 hours before scheduledAt.
  */
 export async function handleMotiveReminder(job: { data: MotiveJobData }): Promise<void> {
@@ -30,7 +30,7 @@ export async function handleMotiveReminder(job: { data: MotiveJobData }): Promis
 
   await sendPushBatch(ids, {
     title: motive.title,
-    body: 'Starts in 2 hours â€” get ready',
+    body: 'Starts in 2 hours -- get ready',
     data: { screen: 'motives', motiveId },
   });
 }

@@ -17,7 +17,7 @@ type Variables = {
 export const profileRoutes = new Hono<{ Variables: Variables }>();
 profileRoutes.use('*', requireAuth);
 
-// GET /api/profile/stats â€” cached per user for 2 min, invalidated on mutations
+// GET /api/profile/stats -- cached per user for 2 min, invalidated on mutations
 profileRoutes.get('/stats', async (c) => {
   const me = c.get('user')!;
   const stats = await cache.wrap(

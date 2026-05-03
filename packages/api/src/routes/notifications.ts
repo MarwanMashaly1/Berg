@@ -13,7 +13,7 @@ type Variables = {
 export const notificationsRoutes = new Hono<{ Variables: Variables }>();
 notificationsRoutes.use('*', requireAuth);
 
-// GET /api/notifications â€” last 30 notifications, newest first
+// GET /api/notifications -- last 30 notifications, newest first
 notificationsRoutes.get('/', async (c) => {
   const me = c.get('user')!;
 
@@ -34,7 +34,7 @@ notificationsRoutes.get('/', async (c) => {
   return c.json({ notifications: rows });
 });
 
-// GET /api/notifications/unread-count â€” badge number
+// GET /api/notifications/unread-count -- badge number
 notificationsRoutes.get('/unread-count', async (c) => {
   const me = c.get('user')!;
 
@@ -51,7 +51,7 @@ notificationsRoutes.get('/unread-count', async (c) => {
   return c.json({ count: unread });
 });
 
-// POST /api/notifications/read-all â€” mark all as read
+// POST /api/notifications/read-all -- mark all as read
 notificationsRoutes.post('/read-all', async (c) => {
   const me = c.get('user')!;
 
@@ -68,7 +68,7 @@ notificationsRoutes.post('/read-all', async (c) => {
   return c.json({ ok: true });
 });
 
-// POST /api/notifications/:id/read â€” mark single notification as read
+// POST /api/notifications/:id/read -- mark single notification as read
 notificationsRoutes.post('/:id/read', async (c) => {
   const me = c.get('user')!;
   const { id } = c.req.param();

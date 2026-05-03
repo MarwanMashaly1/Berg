@@ -15,7 +15,7 @@ type Variables = {
 export const memoriesRoutes = new Hono<{ Variables: Variables }>();
 memoriesRoutes.use('*', requireAuth);
 
-// â”€â”€ Helper: assert caller is an attendee of the motive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Helper: assert caller is an attendee of the motive -----------------------
 async function assertAttendee(motiveId: string, userId: string) {
   const [row] = await db
     .select({ motiveId: motiveAttendees.motiveId })
@@ -25,7 +25,7 @@ async function assertAttendee(motiveId: string, userId: string) {
   return !!row;
 }
 
-// â”€â”€ Helper: generate fresh signed read URLs for an array of storage paths â”€â”€â”€â”€
+// -- Helper: generate fresh signed read URLs for an array of storage paths ----
 async function signPaths(paths: string[]): Promise<string[]> {
   if (paths.length === 0) return [];
   const { data, error } = await supabaseAdmin.storage
@@ -35,7 +35,7 @@ async function signPaths(paths: string[]): Promise<string[]> {
   return data.map((d) => d.signedUrl ?? '').filter(Boolean);
 }
 
-// â”€â”€ POST /api/motives/:id/memories/upload-url â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- POST /api/motives/:id/memories/upload-url ---------------------------------
 // Returns a signed upload URL. Mobile uploads directly to Supabase Storage.
 memoriesRoutes.post('/:id/memories/upload-url', async (c) => {
   const me = c.get('user')!;
@@ -54,7 +54,7 @@ memoriesRoutes.post('/:id/memories/upload-url', async (c) => {
     return c.json({ error: 'unsupported content type' }, 400);
   }
 
-  // UUID path â€” completely unguessable, no PII
+  // UUID path -- completely unguessable, no PII
   const fileId = randomUUID();
   const path = `${motiveId}/${me.id}/${fileId}.${ext.replace(/[^a-z0-9]/gi, '')}`;
 
@@ -70,7 +70,7 @@ memoriesRoutes.post('/:id/memories/upload-url', async (c) => {
   return c.json({ uploadUrl: data.signedUrl, path, token: data.token });
 });
 
-// â”€â”€ POST /api/motives/:id/memories/confirm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- POST /api/motives/:id/memories/confirm ------------------------------------
 // Called after a successful upload. Saves the storage path to the DB.
 memoriesRoutes.post('/:id/memories/confirm', async (c) => {
   const me = c.get('user')!;
@@ -97,7 +97,7 @@ memoriesRoutes.post('/:id/memories/confirm', async (c) => {
     return c.json({ error: 'not an attendee' }, 403);
   }
 
-  // Upsert the memory record â€” append the new path
+  // Upsert the memory record -- append the new path
   const [existing] = await db
     .select({ id: motiveMemories.id, storagePaths: motiveMemories.storagePaths })
     .from(motiveMemories)
@@ -161,7 +161,7 @@ memoriesRoutes.get('/:id/memories/mine', async (c) => {
   });
 });
 
-// â”€â”€ GET /api/motives/:id/memories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- GET /api/motives/:id/memories ---------------------------------------------
 // Returns all attendees' memories with fresh signed read URLs.
 memoriesRoutes.get('/:id/memories', async (c) => {
   const me = c.get('user')!;
@@ -208,7 +208,7 @@ memoriesRoutes.get('/:id/memories', async (c) => {
   return c.json({ memories });
 });
 
-// â”€â”€ DELETE /api/motives/:id/memories/:encodedPath â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- DELETE /api/motives/:id/memories/:encodedPath -----------------------------
 // Deletes one of the caller's own photos.
 memoriesRoutes.delete('/:id/memories/:encodedPath', async (c) => {
   const me = c.get('user')!;
@@ -253,7 +253,7 @@ memoriesRoutes.delete('/:id/memories/:encodedPath', async (c) => {
   return c.json({ ok: true });
 });
 
-// â”€â”€ PATCH /api/motives/:id/memories â€” save vibe tags + ratings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- PATCH /api/motives/:id/memories -- save vibe tags + ratings ---------------
 memoriesRoutes.patch('/:id/memories', async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');

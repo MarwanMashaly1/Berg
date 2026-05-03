@@ -28,7 +28,7 @@ export async function handleSelectDailyPrompt(): Promise<void> {
     .limit(1);
 
   if (existing.length > 0) {
-    console.log(`[prompts] Today (${today}) already has a prompt â€” skipping`);
+    console.log(`[prompts] Today (${today}) already has a prompt -- skipping`);
     return;
   }
 
@@ -76,7 +76,7 @@ export async function handleSelectDailyPrompt(): Promise<void> {
     );
 
   if (candidates.length === 0) {
-    console.error('[prompts] No approved prompts available! Bank is empty â€” please review drafts.');
+    console.error('[prompts] No approved prompts available! Bank is empty -- please review drafts.');
     // Alert the admin
     await notifyEmptyBank();
     return;
@@ -125,9 +125,9 @@ async function notifyEmptyBank(): Promise<void> {
   await resend.emails.send({
     from: 'Berg <info@salamcity.ca>',
     to: adminEmail,
-    subject: 'âš ï¸ Berg: no approved prompts for today',
+    subject: '⚠️ Berg: no approved prompts for today',
     html: `
-      <p>The prompt bank is empty â€” no approved prompts are available for today.</p>
+      <p>The prompt bank is empty -- no approved prompts are available for today.</p>
       <p>Please approve some draft prompts or generate a new batch.</p>
       <p>Trigger a new batch: <a href="${process.env.API_BASE_URL}/api/admin/prompts/generate?token=${process.env.ADMIN_SECRET}">Generate now</a></p>
     `,

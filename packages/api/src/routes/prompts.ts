@@ -19,7 +19,7 @@ export const promptRoutes = new Hono<{ Variables: Variables }>();
 promptRoutes.use('*', requireAuth);
 
 // GET /api/prompts/today
-// The prompt itself is shared across all users â€” cache until midnight.
+// The prompt itself is shared across all users -- cache until midnight.
 // The user's personal response is always fetched fresh (per-user, changes on submit).
 promptRoutes.get('/today', async (c) => {
   const me = c.get('user')!;
@@ -44,7 +44,7 @@ promptRoutes.get('/today', async (c) => {
     return c.json({ error: 'No prompt for today' }, 404);
   }
 
-  // User response is always fresh â€” it changes when user responds
+  // User response is always fresh -- it changes when user responds
   const [existing] = await db
     .select()
     .from(promptResponses)
@@ -101,7 +101,7 @@ promptRoutes.post(
         },
       });
 
-    // Enqueue match-check job â€” runs immediately, checks thresholds
+    // Enqueue match-check job -- runs immediately, checks thresholds
     void enqueue('prompt/new-response', { promptId, userId: me.id, optionKey }).catch(() => {});
 
     posthog.capture({

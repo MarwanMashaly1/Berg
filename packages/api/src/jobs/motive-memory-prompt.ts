@@ -6,10 +6,10 @@ import { sendPushBatch } from '../lib/notifications.js';
 export type MotiveJobData = { motiveId: string };
 
 /**
- * N11 â€” Post-motive memory prompt
+ * N11 -- Post-motive memory prompt
  * Fires 1 hour after scheduledAt.
  *
- * Also marks the motive as 'past' â€” this is the authoritative status transition.
+ * Also marks the motive as 'past' -- this is the authoritative status transition.
  * The scheduled time has passed, so regardless of whether memories are added,
  * the motive is now in the past.
  */
@@ -24,7 +24,7 @@ export async function handleMotiveMemoryPrompt(job: { data: MotiveJobData }): Pr
 
   if (!motive || motive.status === 'cancelled') return;
 
-  // Mark as past â€” the event time has passed
+  // Mark as past -- the event time has passed
   if (motive.status !== 'past') {
     await db
       .update(motives)

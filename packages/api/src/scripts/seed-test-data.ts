@@ -6,7 +6,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 const MY_USER_ID = '9xWk2v3c6T2d4Gb7pwjfNiOBjlHZTjIf';
 
 async function main() {
-  console.log('ðŸŒ± Seeding test data...');
+  console.log('🌱 Seeding test data...');
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -30,7 +30,7 @@ async function main() {
   });
 
   const [prompt] = await db.select().from(dailyPrompts).where(eq(dailyPrompts.activeDate, todayStr)).limit(1);
-  console.log(`âœ… Prompt ready: ${prompt.question}`);
+  console.log(`✅ Prompt ready: ${prompt.question}`);
 
   // 2. Setup Circles
   const circleUserIds = [
@@ -67,7 +67,7 @@ async function main() {
       status: 'confirmed'
     }).onConflictDoNothing();
   }
-  console.log('âœ… Circles confirmed for Jamie, Alex, and Sam.');
+  console.log('✅ Circles confirmed for Jamie, Alex, and Sam.');
 
   // 3. Seed Responses
   const responses = [
@@ -95,12 +95,12 @@ async function main() {
     });
   }
 
-  console.log('âœ… Responses seeded.');
-  console.log('ðŸš€ Test data ready!');
+  console.log('✅ Responses seeded.');
+  console.log('🚀 Test data ready!');
   process.exit(0);
 }
 
 main().catch(err => {
-  console.error('âŒ Seeding failed:', err);
+  console.error('❌ Seeding failed:', err);
   process.exit(1);
 });
