@@ -33,14 +33,18 @@ export async function pickAndUploadAvatar(): Promise<string | null> {
   );
 
   // Get signed upload URL from server
-  const { uploadUrl, publicUrl } = await apiFetch<{
-    uploadUrl: string;
-    path: string;
-    publicUrl: string;
-  }>('/api/users/me/avatar-upload-url', {
-    method: 'POST',
-    body: JSON.stringify({ ext: 'jpg', contentType: 'image/jpeg' }),
-  });
+  let uploadUrl: string, publicUrl: string;
+  try {
+    const res = await apiFetch<{ uploadUrl: string; path: string; publicUrl: string }>(
+      '/api/users/me/avatar-upload-url',
+      { method: 'POST', body: JSON.stringify({ ext: 'jpg', contentType: 'image/jpeg' }) },
+    );
+    uploadUrl = res.uploadUrl;
+    publicUrl = res.publicUrl;
+  } catch (err) {
+    console.error('[avatar] Failed to get upload URL:', err);
+    throw err; // surface to caller with real message
+  }
 
   // Upload the compressed image to Supabase Storage
   const fileResponse = await fetch(compressed.uri);
@@ -53,8 +57,9 @@ export async function pickAndUploadAvatar(): Promise<string | null> {
   });
 
   if (!uploadResponse.ok) {
-    console.error('[avatar] Upload failed:', uploadResponse.status);
-    return null;
+    const body = await uploadResponse.text().catch(() => '');
+    console.error('[avatar] Supabase PUT failed:', uploadResponse.status, body);
+    throw new Error(`Storage upload failed (${uploadResponse.status}): ${body}`);
   }
 
   // Save the public URL to the user profile
@@ -105,7 +110,10 @@ export async function takeAndUploadAvatar(): Promise<string | null> {
     body: blob,
   });
 
-  if (!uploadResponse.ok) return null;
+  if (!uploadResponse.ok) {
+    const body = await uploadResponse.text().catch(() => '');
+    throw new Error(`Storage upload failed (${uploadResponse.status}): ${body}`);
+  }
 
   await patchUser({ image: publicUrl });
   return publicUrl;

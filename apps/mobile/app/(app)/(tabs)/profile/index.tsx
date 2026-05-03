@@ -215,8 +215,8 @@ export default function ProfileScreen() {
               ))}
             </View>
           ) : connections.length === 0 ? (
-            <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}>
-              <Text style={styles.emptyLink}>Add your first connection →</Text>
+            <TouchableOpacity onPress={() => router.push('/(app)/find-friends' as any)}>
+              <Text style={styles.emptyLink}>Find your first connection →</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.avatarStrip}>

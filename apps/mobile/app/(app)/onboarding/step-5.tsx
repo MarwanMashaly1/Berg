@@ -1,22 +1,26 @@
-﻿import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Share } from 'react-native';
+﻿import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Share, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
-import { patchUser } from '../../../lib/api';
+import { patchUser, getInviteLink } from '../../../lib/api';
 
 const C = Colors.light;
 
 export default function Step5() {
   const [saving, setSaving] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
-  const shareLink = `https://berg.app/join/me`; // placeholder until invite links built
+  useEffect(() => {
+    getInviteLink().then((res) => setShareLink(res.url)).catch(() => {});
+  }, []);
 
   async function handleShare() {
-    await Share.share({ message: `Join me on Berg ðŸ§Š\n${shareLink}` });
+    if (!shareLink) return;
+    await Share.share({ message: `Join me on Berg \u{1F9CA}\n${shareLink}` });
   }
 
   async function advance() {
@@ -32,16 +36,19 @@ export default function Step5() {
         <Text style={styles.heading}>Bring your people</Text>
         <View style={styles.rule} />
         <Text style={styles.sub}>Berg works best with friends. Share your link and they'll connect with you automatically.</Text>
-        <TouchableOpacity onPress={handleShare} style={styles.shareCard} activeOpacity={0.85}>
-          <Text style={styles.shareEmoji}>ðŸ”—</Text>
-          <View>
+        <TouchableOpacity onPress={handleShare} style={styles.shareCard} activeOpacity={0.85} disabled={!shareLink}>
+          <Text style={styles.shareEmoji}>{'🔗'}</Text>
+          <View style={{ flex: 1 }}>
             <Text style={styles.shareTitle}>Share your invite link</Text>
-            <Text style={styles.shareUrl}>{shareLink}</Text>
+            {shareLink
+              ? <Text style={styles.shareUrl} numberOfLines={1}>{shareLink}</Text>
+              : <ActivityIndicator size="small" color={C.primary} style={{ alignSelf: 'flex-start', marginTop: 2 }} />
+            }
           </View>
         </TouchableOpacity>
       </View>
       <View style={{ gap: 12 }}>
-        <Button label="Share & continue" onPress={async () => { await handleShare(); advance(); }} loading={saving} fullWidth size="lg" style={styles.btn} textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }} />
+        <Button label="Share & continue" onPress={async () => { await handleShare(); advance(); }} loading={saving} disabled={!shareLink} fullWidth size="lg" style={styles.btn} textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }} />
         <TouchableOpacity onPress={advance} style={{ alignItems: 'center', paddingVertical: 8 }}>
           <Text style={{ fontFamily: Fonts.body, fontSize: 14, color: '#b0a090' }}>Skip for now</Text>
         </TouchableOpacity>

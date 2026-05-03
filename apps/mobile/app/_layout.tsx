@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { View, LogBox } from 'react-native';
 import { Stack, useNavigationContainerRef } from 'expo-router';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+
+// Suppress all dev overlays — Sentry captures everything
+LogBox.ignoreAllLogs();
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -88,17 +92,19 @@ export default Sentry.wrap(function RootLayout() {
   }
 
   return (
-    <PostHogProvider client={posthog}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <QueryClientProvider client={queryClient}>
-          <StatusBar style="light" backgroundColor={Colors.light.text} translucent={false} />
-          <Stack ref={navigationRef} screenOptions={{ headerShown: false, animation: 'fade' }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="(app)" />
-          </Stack>
-        </QueryClientProvider>
-      </GestureHandlerRootView>
-    </PostHogProvider>
+    <ErrorBoundary>
+      <PostHogProvider client={posthog}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <QueryClientProvider client={queryClient}>
+            <StatusBar style="light" backgroundColor={Colors.light.text} translucent={false} />
+            <Stack ref={navigationRef} screenOptions={{ headerShown: false, animation: 'fade' }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="(app)" />
+            </Stack>
+          </QueryClientProvider>
+        </GestureHandlerRootView>
+      </PostHogProvider>
+    </ErrorBoundary>
   );
 });

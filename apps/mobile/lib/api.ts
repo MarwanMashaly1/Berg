@@ -28,30 +28,34 @@ export async function apiFetch<T>(
   const { phoneSessionId, ...fetchOptions } = options;
 
   const cookies = authClient.getCookie();
-  const headers = new Headers(fetchOptions.headers);
 
-  if (cookies) {
-    headers.set('Cookie', cookies);
-  }
-  if (phoneSessionId) {
-    headers.set('x-phone-session-id', phoneSessionId);
-  }
-  if (!headers.has('Content-Type') && fetchOptions.body) {
-    headers.set('Content-Type', 'application/json');
+  // Build headers as a plain object — React Native on Android can drop requests
+  // when a Headers instance is passed, even with the same values.
+  const existingHeaders = fetchOptions.headers
+    ? Object.fromEntries(new Headers(fetchOptions.headers).entries())
+    : {};
+  const headers: Record<string, string> = { ...existingHeaders };
+
+  if (cookies) headers['Cookie'] = cookies;
+  if (phoneSessionId) headers['x-phone-session-id'] = phoneSessionId;
+  if (!headers['Content-Type'] && fetchOptions.body) headers['Content-Type'] = 'application/json';
+
+  if (__DEV__) {
+    console.log('[apiFetch]', fetchOptions.method ?? 'GET', `${API_URL}${path}`, 'cookie:', cookies ? cookies.slice(0, 60) : 'none');
   }
 
   const response = await fetch(`${API_URL}${path}`, {
     ...fetchOptions,
     headers,
-    credentials: 'omit', // BetterAuth Expo uses cookie header, not credentials
   });
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
+    if (__DEV__) console.error('[apiFetch] non-ok', response.status, JSON.stringify(body).slice(0, 200));
     let message: string;
     try {
       const json = JSON.parse(body);
-      message = json.error || json.message || body || response.statusText || `API error ${response.status}`;
+      message = String(json.error || json.message || body || response.statusText || `API error ${response.status}`);
     } catch {
       message = body || response.statusText || `API error ${response.status}`;
     }
@@ -114,6 +118,26 @@ export async function patchUser(fields: Record<string, unknown>) {
     method: 'PATCH',
     body: JSON.stringify(fields),
   });
+}
+
+export async function checkUsername(username: string) {
+  return apiFetch<{ available: boolean; reason?: string }>(
+    `/api/users/check-username?username=${encodeURIComponent(username)}`,
+  );
+}
+
+export type UserSearchResult = {
+  id: string;
+  name: string | null;
+  username: string | null;
+  image: string | null;
+  connectionStatus: 'pending' | 'confirmed' | null;
+};
+
+export async function searchUsers(q: string) {
+  return apiFetch<{ users: UserSearchResult[] }>(
+    `/api/users/search?q=${encodeURIComponent(q)}`,
+  );
 }
 
 export async function getVibeTags() {

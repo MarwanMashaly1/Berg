@@ -100,6 +100,9 @@ export default function ConnectionsScreen() {
           <View style={styles.chevron} />
         </TouchableOpacity>
         <Text style={styles.title}>Connections</Text>
+        <TouchableOpacity onPress={() => router.push('/(app)/find-friends' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.findBtn}>Find friends</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -313,6 +316,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     fontStyle: 'italic',
     flex: 1,
+  },
+  findBtn: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 14,
+    color: C.primary,
   },
 
   // ── Search ──

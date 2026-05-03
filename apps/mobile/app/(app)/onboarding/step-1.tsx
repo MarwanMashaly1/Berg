@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  KeyboardAvoidingView, Platform, Image, ActionSheetIOS, Alert,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +10,8 @@ import { Colors, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
-import { patchUser } from '../../../lib/api';
+import { BergSheet } from '../../../components/ui/BergSheet';
+import { patchUser, checkUsername } from '../../../lib/api';
 import { pickAndUploadAvatar, takeAndUploadAvatar } from '../../../lib/avatar';
 
 const C = Colors.light;
@@ -18,40 +19,44 @@ const C = Colors.light;
 export default function Step1() {
   const { data: session } = authClient.useSession();
   const [name, setName] = useState((session?.user?.name ?? '') as string);
+  const [username, setUsername] = useState((session?.user as any)?.username ?? '');
+  const [usernameError, setUsernameError] = useState('');
+  const [usernameChecking, setUsernameChecking] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>((session?.user?.image ?? null) as string | null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [sheetVisible, setSheetVisible] = useState(false);
   const insets = useSafeAreaInsets();
 
-  function showAvatarPicker() {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Take photo', 'Choose from library'],
-          cancelButtonIndex: 0,
-        },
-        async (index) => {
-          if (index === 1) await handleCamera();
-          if (index === 2) await handleLibrary();
-        },
-      );
-    } else {
-      Alert.alert('Change photo', undefined, [
-        { text: 'Take photo', onPress: handleCamera },
-        { text: 'Choose from library', onPress: handleLibrary },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+  async function handleUsernameBlur() {
+    const val = username.toLowerCase().trim();
+    if (!val) { setUsernameError(''); return; }
+    if (!/^[a-z0-9_]{3,20}$/.test(val)) {
+      setUsernameError('3–20 characters: letters, numbers, underscores only');
+      return;
+    }
+    setUsernameChecking(true);
+    try {
+      const { available } = await checkUsername(val);
+      setUsernameError(available ? '' : 'That handle is already taken');
+    } catch {
+      // ignore network errors on blur check
+    } finally {
+      setUsernameChecking(false);
     }
   }
 
   async function handleLibrary() {
     setUploading(true);
+    setError('');
     try {
       const url = await pickAndUploadAvatar();
       if (url) setAvatarUri(url);
-    } catch {
-      Alert.alert('Upload failed', 'Please try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? String(err.message) : String(err);
+      console.error('[step1:library] raw err:', JSON.stringify(err, Object.getOwnPropertyNames(err instanceof Error ? err : {})));
+      setError(msg || 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -59,11 +64,14 @@ export default function Step1() {
 
   async function handleCamera() {
     setUploading(true);
+    setError('');
     try {
       const url = await takeAndUploadAvatar();
       if (url) setAvatarUri(url);
-    } catch {
-      Alert.alert('Upload failed', 'Please try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? String(err.message) : String(err);
+      console.error('[step1:camera] raw err:', JSON.stringify(err, Object.getOwnPropertyNames(err instanceof Error ? err : {})));
+      setError(msg || 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -71,10 +79,20 @@ export default function Step1() {
 
   async function handleNext() {
     const trimmed = name.trim();
+    const handle = username.toLowerCase().trim();
     if (!trimmed) { setError('Please enter your name'); return; }
+    if (handle && !/^[a-z0-9_]{3,20}$/.test(handle)) {
+      setUsernameError('3–20 characters: letters, numbers, underscores only');
+      return;
+    }
+    if (usernameError) return;
     setLoading(true);
     try {
-      await patchUser({ name: trimmed, displayName: trimmed, onboardingStep: '1' });
+      if (handle) {
+        const { available } = await checkUsername(handle);
+        if (!available) { setUsernameError('That handle is already taken'); setLoading(false); return; }
+      }
+      await patchUser({ name: trimmed, displayName: trimmed, ...(handle ? { username: handle } : {}), onboardingStep: '1' });
       router.push('/(app)/onboarding/step-2');
     } catch {
       setError('Something went wrong. Try again.');
@@ -115,7 +133,7 @@ export default function Step1() {
           {/* Avatar picker */}
           <TouchableOpacity
             style={styles.avatarWrap}
-            onPress={showAvatarPicker}
+            onPress={() => setSheetVisible(true)}
             activeOpacity={0.8}
             disabled={uploading}
           >
@@ -147,9 +165,21 @@ export default function Step1() {
             onChangeText={(t) => { setName(t); setError(''); }}
             placeholder="Your name"
             error={error}
+            returnKeyType="next"
+            containerStyle={{ marginTop: 24 }}
+          />
+          <Input
+            value={username}
+            onChangeText={(t) => { setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, '')); setUsernameError(''); }}
+            onBlur={handleUsernameBlur}
+            placeholder="@handle (optional)"
+            error={usernameError}
+            hint={usernameChecking ? 'Checking…' : undefined}
+            autoCapitalize="none"
+            autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleNext}
-            containerStyle={{ marginTop: 24 }}
+            containerStyle={{ marginTop: 12 }}
           />
         </View>
 
@@ -164,6 +194,16 @@ export default function Step1() {
           textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }}
         />
       </ScrollView>
+
+      <BergSheet
+        visible={sheetVisible}
+        title="Add photo"
+        onDismiss={() => setSheetVisible(false)}
+        options={[
+          { label: 'Take photo', onPress: handleCamera },
+          { label: 'Choose from library', onPress: handleLibrary },
+        ]}
+      />
     </KeyboardAvoidingView>
   );
 }
