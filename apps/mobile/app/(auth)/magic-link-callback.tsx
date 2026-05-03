@@ -30,7 +30,14 @@ export default function MagicLinkCallbackScreen() {
     await new Promise((r) => setTimeout(r, 600));
     const session = await authClient.getSession();
     if (session.data) {
-      router.replace('/(app)/(tabs)/discovery');
+      const user = session.data.user as any;
+      if (!user?.onboardingCompleted) {
+        const step = parseInt(user?.onboardingStep ?? '0', 10);
+        const nextStep = Math.min(step + 1, 6);
+        router.replace(`/(app)/onboarding/step-${nextStep}` as any);
+      } else {
+        router.replace('/(app)/(tabs)/discovery');
+      }
     } else {
       router.replace({ pathname: '/(auth)/signup', params: { error: 'link_expired' } });
     }

@@ -48,7 +48,7 @@ verifyCodeRoutes.post('/', zValidator('json', schema), async (c) => {
   const baseURL = `http://localhost:${process.env.PORT ?? 3000}`;
   const verifyURL = new URL('/api/auth/magic-link/verify', baseURL);
   verifyURL.searchParams.set('token', token);
-  // berg:// is in trustedOrigins â€” server-side so no actual redirect happens
+  // berg:// is in trustedOrigins -- server-side so no actual redirect happens
   verifyURL.searchParams.set('callbackURL', 'berg://done');
 
   const verifyResponse = await auth.handler(new Request(verifyURL.toString(), {
@@ -58,7 +58,7 @@ verifyCodeRoutes.post('/', zValidator('json', schema), async (c) => {
   const setCookie = verifyResponse.headers.get('set-cookie');
   if (!setCookie) {
     console.error('[verify-code] No set-cookie in response, status:', verifyResponse.status);
-    return c.json({ error: 'Verification failed â€” token may be expired or already used' }, 400);
+    return c.json({ error: 'Verification failed -- token may be expired or already used' }, 400);
   }
 
   console.log('[verify-code] Verified, returning set-cookie');

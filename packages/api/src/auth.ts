@@ -108,10 +108,10 @@ export const auth = betterAuth({
             ?? 'berg://auth/magic-link-callback';
           const urlToken = parsedUrl.searchParams.get('token') ?? rawToken ?? '';
 
-          // Direct deep link — tapping opens the app, no browser needed
-          const emailLink = urlToken
-            ? `${callbackURL}?token=${encodeURIComponent(urlToken)}`
-            : url;
+          // Standard HTTP link (via BetterAuth verify endpoint)
+          // Email clients (like Gmail) block custom schemes like 'exp://' or 'app.berg.social://'.
+          // Using the HTTP link ensures the button opens a browser, verifies the token, and 302 redirects to the app.
+          const emailLink = url;
 
           // Generate 8-char short code for manual entry fallback
           let shortCode: string | undefined;

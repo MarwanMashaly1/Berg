@@ -81,23 +81,10 @@ export default function MagicLinkSentScreen() {
       const cookieJson = getSetCookie(data.setCookie, prevCookie ?? undefined);
       SecureStore.setItem(COOKIE_KEY, cookieJson);
 
-      // Step 3: validate the session directly and navigate in one step.
-      // Bypasses index.tsx entirely to avoid the useSession timing race
-      // between _layout.tsx mounting and the atom propagating.
-      const sessionResult = await authClient.getSession();
-      if (!sessionResult.data) {
-        setError('Sign-in failed. Please try again.');
-        return;
-      }
-
-      const user = sessionResult.data.user as any;
-      if (!user?.onboardingCompleted) {
-        const step = parseInt(user?.onboardingStep ?? '0', 10);
-        const nextStep = Math.min(step + 1, 6);
-        router.replace(`/(app)/onboarding/step-${nextStep}` as any);
-      } else {
-        router.replace('/(app)/(tabs)/discovery');
-      }
+      // Step 3: route through the callback screen which waits 600ms for
+      // BetterAuth's reactive atom to pick up the new cookie before routing.
+      // Direct navigation races against the stale atom in (app)/_layout.tsx.
+      router.replace('/(auth)/magic-link-callback');
     } catch (e) {
       console.error('[verify] error:', e);
       setError('Something went wrong. Please try again.');

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { Stack, useNavigationContainerRef } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PostHogProvider } from 'posthog-react-native';
@@ -90,6 +91,7 @@ export default Sentry.wrap(function RootLayout() {
     <PostHogProvider client={posthog}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
+          <StatusBar style="light" backgroundColor={Colors.light.text} translucent={false} />
           <Stack ref={navigationRef} screenOptions={{ headerShown: false, animation: 'fade' }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
