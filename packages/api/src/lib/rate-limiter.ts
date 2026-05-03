@@ -92,4 +92,6 @@ export const API_LIMITS = {
   motiveInvite:      { limit: 30,  windowMs: 60 * 60 * 1000 },     // 30/hr
   avatarUpload:      { limit: 10,  windowMs: 60 * 60 * 1000 },     // 10/hr
   connectionRequest: { limit: 30,  windowMs: 60 * 60 * 1000 },     // 30/hr
+  phoneStart:        { limit: 5,   windowMs: 60 * 60 * 1000 },     // 5 SMS/hr per phone
+  verifyCode:        { limit: 10,  windowMs: 15 * 60 * 1000 },     // 10 attempts per 15 min
 } as const;

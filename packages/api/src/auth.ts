@@ -15,6 +15,10 @@ import {
 } from '@berg/shared';
 import { eq, and, gt } from 'drizzle-orm';
 
+if (process.env.NODE_ENV === 'production' && !process.env.BETTER_AUTH_SECRET) {
+  throw new Error('BETTER_AUTH_SECRET must be set in production');
+}
+
 export const auth = betterAuth({
   appName: 'Berg',
   baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',

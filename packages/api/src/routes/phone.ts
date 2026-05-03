@@ -6,6 +6,7 @@ import { db } from '../db';
 import { pendingPhone } from '@berg/shared';
 import { randomUUID } from 'crypto';
 import { eq } from 'drizzle-orm';
+import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
 
 export const phoneRoutes = new Hono();
 
@@ -17,7 +18,7 @@ const startSchema = z.object({
 phoneRoutes.post('/start', zValidator('json', startSchema), async (c) => {
   const { phoneNumber, countryCode } = c.req.valid('json');
 
-  // Validate and normalize to E.164
+  // Validate and normalize to E.164 first so we can rate-limit on the canonical number
   let e164: string;
   try {
     if (!isValidPhoneNumber(phoneNumber, countryCode as any)) {
@@ -27,6 +28,13 @@ phoneRoutes.post('/start', zValidator('json', startSchema), async (c) => {
     e164 = parsed.format('E.164');
   } catch {
     return c.json({ error: 'Invalid phone number format' }, 400);
+  }
+
+  // Rate limit: 5 SMS per phone number per hour (prevents SMS flooding)
+  const rl = rateLimiter.check(`phone:${e164}`, API_LIMITS.phoneStart.limit, API_LIMITS.phoneStart.windowMs);
+  if (!rl.allowed) {
+    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+    return c.json({ error: 'Too many requests. Try again later.' }, 429);
   }
 
   const sessionId = randomUUID();

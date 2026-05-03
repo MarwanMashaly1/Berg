@@ -11,13 +11,14 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_STAGING_API_URL"
+        "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_PRODUCTION_API_URL"
+        "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   },

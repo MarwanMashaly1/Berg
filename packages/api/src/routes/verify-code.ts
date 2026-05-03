@@ -3,6 +3,8 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { lookupCode } from '../lib/code-store.js';
 import { auth } from '../auth.js';
+import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
+import { createDemoSession } from './demo-auth.js';
 
 export const verifyCodeRoutes = new Hono();
 
@@ -16,6 +18,21 @@ const schema = z.object({
 
 verifyCodeRoutes.post('/', zValidator('json', schema), async (c) => {
   const { code, token: directToken } = c.req.valid('json');
+
+  // Rate limit by the submitted code/token to prevent brute-force
+  const rlKey = `verify-code:${(code ?? directToken ?? '').slice(0, 32)}`;
+  const rl = rateLimiter.check(rlKey, API_LIMITS.verifyCode.limit, API_LIMITS.verifyCode.windowMs);
+  if (!rl.allowed) {
+    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+    return c.json({ error: 'Too many attempts. Try again later.' }, 429);
+  }
+
+  // Demo code bypass — lets store reviewers log in without a real magic link
+  const demoCode = process.env.DEMO_CODE;
+  if (demoCode && code?.toUpperCase() === demoCode.toUpperCase()) {
+    const setCookie = await createDemoSession(c.req.header('x-forwarded-for'));
+    return c.json({ setCookie });
+  }
 
   // Resolve the full magic link token
   let token: string | null = directToken ?? null;

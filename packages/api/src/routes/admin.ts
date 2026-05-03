@@ -202,14 +202,24 @@ adminRoutes.post('/prompts/approve-all', async (c) => {
   const ids = idsParam.split(',').filter(Boolean);
   if (ids.length === 0) return c.html('<p>No IDs provided</p>', 400);
 
-  adminLog('prompt.approve-all', `count=${ids.length} ids=${ids.join(',')} via=api`);
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!ids.every(id => uuidRe.test(id))) {
+    return c.html('<p>Invalid ID format</p>', 400);
+  }
+
+  adminLog('prompt.approve-all', `count=${ids.length} via=api`);
   await db.update(dailyPrompts).set({ status: 'approved' }).where(inArray(dailyPrompts.id, ids));
   return c.html(successPage('âœ…', `${ids.length} prompts approved`, 'They will be scheduled for upcoming days.'));
 });
 
+const ALLOWED_PROMPT_STATUSES = ['draft', 'approved', 'archived', 'active'] as const;
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // â”€â”€ PATCH /api/admin/prompts/:id â€” update prompt text/score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 adminRoutes.patch('/prompts/:id', async (c) => {
   const { id } = c.req.param();
+  if (!uuidRegex.test(id)) return c.json({ error: 'Invalid ID' }, 400);
+
   const body = await c.req.json<{
     question?: string;
     status?: string;
@@ -217,13 +227,20 @@ adminRoutes.patch('/prompts/:id', async (c) => {
     options?: unknown;
   }>();
 
+  if (body.status && !ALLOWED_PROMPT_STATUSES.includes(body.status as typeof ALLOWED_PROMPT_STATUSES[number])) {
+    return c.json({ error: 'Invalid status' }, 400);
+  }
+  if (body.qualityScore !== undefined && (typeof body.qualityScore !== 'number' || body.qualityScore < 0 || body.qualityScore > 10)) {
+    return c.json({ error: 'qualityScore must be 0–10' }, 400);
+  }
+
   adminLog('prompt.patch', `id=${id} fields=${Object.keys(body).join(',')}`);
   await db
     .update(dailyPrompts)
     .set({
-      ...(body.question && { question: body.question }),
+      ...(body.question && { question: String(body.question).slice(0, 500) }),
       ...(body.status && { status: body.status }),
-      ...(body.qualityScore && { qualityScore: body.qualityScore }),
+      ...(body.qualityScore !== undefined && { qualityScore: body.qualityScore }),
       ...(body.options && { options: JSON.stringify(body.options) }),
     })
     .where(eq(dailyPrompts.id, id));
