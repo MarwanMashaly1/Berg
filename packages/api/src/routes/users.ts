@@ -270,9 +270,11 @@ userRoutes.post('/me/avatar-upload-url', async (c) => {
   return c.json({ uploadUrl: data.signedUrl, path, publicUrl: urlData.publicUrl });
 });
 
-// GET /api/users/:userId/public -- public profile card (for QR scan connection flow)
+// GET /api/users/:userId/public -- public profile card
 userRoutes.get('/:userId/public', async (c) => {
+  const me = c.get('user');
   const userId = c.req.param('userId');
+
   const [user] = await db
     .select({
       id: users.id,
@@ -286,7 +288,26 @@ userRoutes.get('/:userId/public', async (c) => {
     .limit(1);
 
   if (!user) return c.json({ error: 'User not found' }, 404);
-  return c.json({ user });
+
+  // Vibe tags
+  const tags = await db
+    .select({ emoji: vibeTags.emoji, label: vibeTags.label })
+    .from(userVibeTags)
+    .innerJoin(vibeTags, eq(userVibeTags.tagId, vibeTags.id))
+    .where(eq(userVibeTags.userId, userId));
+
+  // Connection status (null if viewing own profile or not connected)
+  let connectionStatus: 'pending' | 'confirmed' | null = null;
+  if (me && me.id !== userId) {
+    const [circle] = await db
+      .select({ status: circles.status })
+      .from(circles)
+      .where(and(eq(circles.userId, me.id), eq(circles.friendId, userId)))
+      .limit(1);
+    connectionStatus = (circle?.status as typeof connectionStatus) ?? null;
+  }
+
+  return c.json({ user: { ...user, vibeTags: tags, connectionStatus } });
 });
 
 // POST /api/users/me/push-token -- register Expo push token for this device

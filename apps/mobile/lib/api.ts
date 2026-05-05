@@ -102,6 +102,8 @@ export function getPublicUser(userId: string) {
       image: string | null;
       username: string | null;
       availabilityStatus: string;
+      vibeTags: Array<{ emoji: string; label: string }>;
+      connectionStatus: 'pending' | 'confirmed' | null;
     };
   }>(`/api/users/${userId}/public`);
 }
