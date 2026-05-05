@@ -435,11 +435,11 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerTitle: {
-    fontFamily: 'Fraunces_400Regular',
+    fontFamily: Fonts.heading,
     fontSize: 28,
     fontStyle: 'italic',
     color: C.text,
-    lineHeight: 34,
+    letterSpacing: -0.3,
   },
   headerDate: {
     fontFamily: 'DMSans_400Regular',
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
   chipText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 12,
-    color: C.textTertiary,
+    color: C.textSecondary,
   },
   chipTextActive: {
     color: C.textInverse,

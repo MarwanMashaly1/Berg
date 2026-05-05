@@ -10,6 +10,7 @@ import { getSetCookie } from '@better-auth/expo/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/theme';
 import { authClient } from '../../lib/auth';
+import { identifyUser } from '../../lib/analytics';
 
 // Must match the storagePrefix in lib/auth.ts → 'berg' + '_cookie'
 const COOKIE_KEY = 'berg_cookie';
@@ -74,17 +75,29 @@ export default function MagicLinkSentScreen() {
         return;
       }
 
-      // Step 2: store the session cookie using the sync API so that
-      // expoClient's sync SecureStore.getItem can read it on the very
-      // next request without an async flush delay.
+      // Step 2: store the session cookie
       const prevCookie = SecureStore.getItem(COOKIE_KEY);
       const cookieJson = getSetCookie(data.setCookie, prevCookie ?? undefined);
       SecureStore.setItem(COOKIE_KEY, cookieJson);
 
-      // Step 3: route through the callback screen which waits 600ms for
-      // BetterAuth's reactive atom to pick up the new cookie before routing.
-      // Direct navigation races against the stale atom in (app)/_layout.tsx.
-      router.replace('/(auth)/magic-link-callback');
+      // Step 3: call getSession() — this forces BetterAuth's atom to hydrate
+      // with the new session BEFORE we navigate into (app), so AppLayout's
+      // useSession() guard never sees a null session on mount.
+      const sessionResult = await authClient.getSession();
+      if (!sessionResult.data) {
+        setError('Session could not be established. Please try again.');
+        return;
+      }
+
+      const user = sessionResult.data.user as any;
+      identifyUser(user.id, { name: user.name ?? '', email: user.email ?? '' });
+
+      if (!user?.onboardingCompleted) {
+        const step = parseInt(user?.onboardingStep ?? '0', 10);
+        router.replace(`/(app)/onboarding/step-${Math.min(step + 1, 6)}` as any);
+      } else {
+        router.replace('/(app)/(tabs)/discovery');
+      }
     } catch (e) {
       console.error('[verify] error:', e);
       setError('Something went wrong. Please try again.');

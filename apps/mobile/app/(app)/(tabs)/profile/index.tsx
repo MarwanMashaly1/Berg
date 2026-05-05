@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Modal, Share, RefreshControl, Platform, Alert,
+  Modal, Share, RefreshControl, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +40,8 @@ export default function ProfileScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [scanResult, setScanResult] = useState<{ userId: string; name: string | null; image: string | null } | null>(null);
   const [scanSending, setScanSending] = useState(false);
+  const [scanDone, setScanDone] = useState<'success' | 'error' | null>(null);
+  const [scanMessage, setScanMessage] = useState('');
   const scanCooldown = useRef(false);
   const [showAvailPicker, setShowAvailPicker] = useState(false);
   const [availability, setAvailability] = useState<string>(user?.availabilityStatus ?? 'down_to_hang');
@@ -91,15 +93,11 @@ export default function ProfileScreen() {
     setScanSending(true);
     try {
       await requestConnection(scanResult.userId);
-      Alert.alert(
-        'Request sent!',
-        `Connection request sent to ${scanResult.name ?? 'this person'}.`,
-        [{ text: 'Done', onPress: () => { setScanResult(null); setShowQR(false); scanCooldown.current = false; } }],
-      );
+      setScanMessage(`Request sent to ${scanResult.name ?? 'this person'}!`);
+      setScanDone('success');
     } catch (e: any) {
-      Alert.alert('Already connected', e.message ?? 'Could not send request.');
-      setScanResult(null);
-      scanCooldown.current = false;
+      setScanMessage(e.message ?? 'Could not send request.');
+      setScanDone('error');
     } finally {
       setScanSending(false);
     }
@@ -298,14 +296,14 @@ export default function ProfileScreen() {
         visible={showQR}
         animationType="slide"
         presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={() => { setShowQR(false); setScanResult(null); scanCooldown.current = false; setQrTab('my'); }}
+        onRequestClose={() => { setShowQR(false); setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; setQrTab('my'); }}
       >
         <View style={styles.qrModal}>
           {/* Header */}
           <View style={styles.qrModalHeader}>
             <TouchableOpacity
               style={styles.qrModalBack}
-              onPress={() => { setShowQR(false); setScanResult(null); scanCooldown.current = false; setQrTab('my'); }}
+              onPress={() => { setShowQR(false); setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; setQrTab('my'); }}
             >
               <Text style={styles.qrModalBackText}>Close</Text>
             </TouchableOpacity>
@@ -335,7 +333,7 @@ export default function ProfileScreen() {
           {/* My Code tab */}
           {qrTab === 'my' && (
             <View style={styles.qrContent}>
-              <Avatar name={displayName} userId={user?.id} size="xl" style={styles.qrAvatar} />
+              <Avatar name={displayName} userId={user?.id} uri={user?.image ?? undefined} size="xl" style={styles.qrAvatar} />
               <Text style={styles.qrName}>{displayName}</Text>
               {username ? <Text style={styles.qrUsername}>@{username}</Text> : null}
               {user?.id ? (
@@ -372,9 +370,35 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               {cameraPermission?.granted ? (
                 scanResult ? (
+                  scanDone ? (
+                    // Success / error result card
+                    <View style={styles.scanConfirm}>
+                      <View style={[styles.scanResultIcon, scanDone === 'success' ? styles.scanResultIconSuccess : styles.scanResultIconError]}>
+                        <Text style={styles.scanResultIconText}>{scanDone === 'success' ? '✓' : '!'}</Text>
+                      </View>
+                      <Text style={styles.scanConfirmName}>
+                        {scanDone === 'success' ? 'Request sent!' : 'Hmm, something went wrong'}
+                      </Text>
+                      <Text style={styles.scanConfirmSub}>{scanMessage}</Text>
+                      <TouchableOpacity
+                        style={[styles.qrShareBtn, { marginTop: 28 }]}
+                        onPress={() => { setShowQR(false); setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; setQrTab('my'); }}
+                      >
+                        <Text style={styles.qrShareText}>Done</Text>
+                      </TouchableOpacity>
+                      {scanDone === 'error' && (
+                        <TouchableOpacity
+                          style={styles.scanRetry}
+                          onPress={() => { setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; }}
+                        >
+                          <Text style={styles.scanRetryText}>Try again</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
                   // Show confirmation after successful scan
                   <View style={styles.scanConfirm}>
-                    <Avatar name={scanResult.name} userId={scanResult.userId} size="xl" style={{ marginBottom: 16 }} />
+                    <Avatar name={scanResult.name} userId={scanResult.userId} uri={scanResult.image ?? undefined} size="xl" style={{ marginBottom: 16 }} />
                     <Text style={styles.scanConfirmName}>{scanResult.name ?? 'Someone'}</Text>
                     <Text style={styles.scanConfirmSub}>Send them a connection request?</Text>
                     <TouchableOpacity
@@ -393,6 +417,7 @@ export default function ProfileScreen() {
                       <Text style={styles.scanRetryText}>Scan again</Text>
                     </TouchableOpacity>
                   </View>
+                  )
                 ) : (
                   // Camera viewfinder
                   <View style={{ flex: 1 }}>
@@ -815,5 +840,17 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bodySemiBold,
     fontSize: 13,
     color: 'rgba(255,255,255,0.4)',
+  },
+  scanResultIcon: {
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 20,
+  },
+  scanResultIconSuccess: { backgroundColor: 'rgba(45,106,79,0.25)', borderWidth: 2, borderColor: '#2D6A4F' },
+  scanResultIconError: { backgroundColor: 'rgba(197,48,48,0.2)', borderWidth: 2, borderColor: '#C53030' },
+  scanResultIconText: {
+    fontFamily: Fonts.heading,
+    fontSize: 32,
+    color: '#fff',
   },
 });

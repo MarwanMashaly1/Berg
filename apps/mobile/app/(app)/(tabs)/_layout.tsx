@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Tabs, router, usePathname } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authClient } from '../../../lib/auth';
 import { Colors } from '../../../constants/theme';
 import { IconSymbol } from '../../../components/ui/icon-symbol';
@@ -27,6 +28,7 @@ function TabIcon({
 export default function TabsLayout() {
   const { data: session, isPending } = authClient.useSession();
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -68,8 +70,8 @@ export default function TabsLayout() {
           backgroundColor: 'rgba(248,242,232,0.97)',
           borderTopColor: 'rgba(0,0,0,0.08)',
           borderTopWidth: 1,
-          height: 58,
-          paddingBottom: 8,
+          height: 58 + insets.bottom,
+          paddingBottom: insets.bottom + 8,
           paddingTop: 6,
         },
       }}

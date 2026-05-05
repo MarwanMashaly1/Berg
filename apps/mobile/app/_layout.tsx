@@ -96,7 +96,7 @@ export default Sentry.wrap(function RootLayout() {
       <PostHogProvider client={posthog}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <QueryClientProvider client={queryClient}>
-            <StatusBar style="light" backgroundColor={Colors.light.text} translucent={false} />
+            <StatusBar style="dark" backgroundColor={Colors.light.backgroundWarm} translucent={false} />
             <Stack ref={navigationRef} screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />

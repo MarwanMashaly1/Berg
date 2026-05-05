@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.background,
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  title: { fontFamily: Fonts.heading, fontSize: 22, color: C.text, fontStyle: 'italic' },
+  title: { fontFamily: Fonts.heading, fontSize: 28, color: C.text, fontStyle: 'italic', letterSpacing: -0.3 },
   newBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: C.surfaceAlt,

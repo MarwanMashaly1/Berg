@@ -1,24 +1,28 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stack, router } from 'expo-router';
 import { authClient } from '../../lib/auth';
 
 export default function AppLayout() {
   const { data: session, isPending } = authClient.useSession();
-  // Track whether we've ever seen a valid session so we don't eject
-  // the user during a brief re-validation on slow networks.
   const everHadSession = useRef(false);
+  // Grace period: don't redirect on the very first render — BetterAuth's atom
+  // may report isPending=false briefly before hydrating from SecureStore.
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(true), 300);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (session) {
       everHadSession.current = true;
       return;
     }
-    // Only redirect if BetterAuth is certain there's no session (not still loading)
-    // AND we never had a valid session in this app run.
-    if (!isPending && !everHadSession.current) {
+    if (settled && !isPending && !everHadSession.current) {
       router.replace('/(auth)/welcome');
     }
-  }, [session, isPending]);
+  }, [session, isPending, settled]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }
