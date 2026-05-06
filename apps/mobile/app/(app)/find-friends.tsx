@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Image, KeyboardAvoidingView, Platform,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/theme';
+import { Avatar } from '../../components/ui/Avatar';
 import { searchUsers, requestConnection, type UserSearchResult } from '../../lib/api';
 
 const C = Colors.light;
@@ -53,16 +54,7 @@ export default function FindFriendsScreen() {
 
     return (
       <View style={styles.row}>
-        {item.image
-          ? <Image source={{ uri: item.image }} style={styles.avatar} />
-          : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Text style={styles.avatarInitial}>
-                {(item.name ?? item.username ?? '?')[0].toUpperCase()}
-              </Text>
-            </View>
-          )
-        }
+        <Avatar name={item.name ?? item.username} userId={item.id} uri={item.image ?? undefined} size="md" />
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{item.name ?? 'Unknown'}</Text>
           {item.username && <Text style={styles.handle}>@{item.username}</Text>}
@@ -168,13 +160,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(0,0,0,0.05)',
     gap: 12,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  avatarPlaceholder: {
-    backgroundColor: C.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: { fontFamily: Fonts.bodySemiBold, fontSize: 18, color: C.primary },
   info: { flex: 1 },
   name: { fontFamily: Fonts.bodySemiBold, fontSize: 15, color: C.text },
   handle: { fontFamily: Fonts.body, fontSize: 13, color: C.textTertiary, marginTop: 1 },

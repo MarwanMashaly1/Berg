@@ -30,14 +30,15 @@ export default function PublicUserProfile() {
     image: string | null;
     username: string | null;
     availabilityStatus: string;
+    vibeTags: Array<{ emoji: string; label: string }>;
+    connectionStatus: 'pending' | 'confirmed' | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
-  const [connected, setConnected] = useState(false);
+  const [requested, setRequested] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    // Optimistically show passed params while fetching full data
     if (paramName) {
       setUser({
         id,
@@ -45,23 +46,29 @@ export default function PublicUserProfile() {
         image: paramAvatar ?? null,
         username: null,
         availabilityStatus: 'down_to_hang',
+        vibeTags: [],
+        connectionStatus: null,
       });
     }
     getPublicUser(id)
-      .then(({ user: u }) => { setUser(u); setLoading(false); })
+      .then(({ user: u }) => {
+        setUser({ ...u, vibeTags: u.vibeTags ?? [], connectionStatus: u.connectionStatus ?? null });
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [id]);
 
   async function handleConnect() {
-    if (!id || connecting || connected) return;
+    if (!id || connecting || requested) return;
     setConnecting(true);
     try {
       await requestConnection(id);
-      setConnected(true);
+      setRequested(true);
     } catch { /* ignore */ }
     finally { setConnecting(false); }
   }
 
+  const connectionStatus = requested ? 'pending' : user?.connectionStatus ?? null;
   const avail = AVAIL_LABEL[user?.availabilityStatus ?? ''] ?? AVAIL_LABEL.down_to_hang;
 
   return (
@@ -97,23 +104,41 @@ export default function PublicUserProfile() {
           )}
         </View>
 
+        {/* Vibe tags */}
+        {user && (user.vibeTags ?? []).length > 0 && (
+          <View style={styles.tagsSection}>
+            <Text style={styles.tagsLabel}>INTERESTS</Text>
+            <View style={styles.tagsWrap}>
+              {(user.vibeTags ?? []).map((t) => (
+                <View key={t.label} style={styles.tag}>
+                  <Text style={styles.tagText}>{t.emoji} {t.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* Connect CTA */}
         <View style={styles.ctaSection}>
           {loading && !user ? (
             <ActivityIndicator color={C.primary} />
+          ) : connectionStatus === 'confirmed' ? (
+            <View style={[styles.connectBtn, styles.connectBtnDone]}>
+              <Text style={[styles.connectText, styles.connectTextDone]}>Connected ✓</Text>
+            </View>
+          ) : connectionStatus === 'pending' ? (
+            <View style={[styles.connectBtn, styles.connectBtnPending]}>
+              <Text style={[styles.connectText, styles.connectTextPending]}>Request sent · waiting</Text>
+            </View>
           ) : (
             <TouchableOpacity
-              style={[
-                styles.connectBtn,
-                connected && styles.connectBtnDone,
-                connecting && { opacity: 0.6 },
-              ]}
+              style={[styles.connectBtn, connecting && { opacity: 0.6 }]}
               onPress={handleConnect}
-              disabled={connecting || connected}
+              disabled={connecting}
               activeOpacity={0.85}
             >
-              <Text style={[styles.connectText, connected && styles.connectTextDone]}>
-                {connected ? 'Connection request sent ✓' : connecting ? 'Sending…' : 'Connect'}
+              <Text style={styles.connectText}>
+                {connecting ? 'Sending…' : 'Connect'}
               </Text>
             </TouchableOpacity>
           )}
@@ -216,10 +241,48 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(45,106,79,0.30)',
   },
+  connectBtnPending: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: C.border,
+  },
   connectText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 15,
     color: C.textInverse,
   },
   connectTextDone: { color: '#2D6A4F' },
+  connectTextPending: { color: C.textSecondary },
+
+  // Vibe tags
+  tagsSection: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  tagsLabel: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 10,
+    color: C.textTertiary,
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  tagText: {
+    fontFamily: Fonts.body,
+    fontSize: 13,
+    color: C.text,
+  },
 });

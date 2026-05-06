@@ -163,7 +163,7 @@ export default function ConnectionsScreen() {
             </View>
             {pending.map((p) => (
               <View key={p.id} style={styles.pendingCard}>
-                <Avatar name={p.name} userId={p.id} size="md" />
+                <Avatar name={p.name} userId={p.id} uri={p.image ?? undefined} size="md" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowName}>{p.name ?? 'Someone'}</Text>
                   <Text style={styles.rowMeta}>Wants to connect with you</Text>
@@ -214,8 +214,13 @@ export default function ConnectionsScreen() {
             filteredConfirmed.map((conn) => {
               const avail = AVAIL_LABEL[conn.availabilityStatus] ?? AVAIL_LABEL.down_to_hang;
               return (
-                <View key={conn.id} style={styles.connCard}>
-                  <Avatar name={conn.name} userId={conn.id} size="md" />
+                <TouchableOpacity
+                  key={conn.id}
+                  style={styles.connCard}
+                  activeOpacity={0.7}
+                  onPress={() => router.push({ pathname: '/(app)/user/[id]', params: { id: conn.id, name: conn.name ?? '', avatarUrl: conn.image ?? '' } } as any)}
+                >
+                  <Avatar name={conn.name} userId={conn.id} uri={conn.image ?? undefined} size="md" />
                   <View style={{ flex: 1 }}>
                     <View style={styles.connNameRow}>
                       <Text style={styles.rowName}>{conn.name ?? 'Unknown'}</Text>
@@ -231,7 +236,7 @@ export default function ConnectionsScreen() {
                   </View>
                   {/* Chevron drawn with views */}
                   <View style={styles.rowChevron} />
-                </View>
+                </TouchableOpacity>
               );
             })
           )}
@@ -254,7 +259,7 @@ export default function ConnectionsScreen() {
 
             {sentExpanded && sent.map((s) => (
               <View key={s.id} style={styles.sentCard}>
-                <Avatar name={s.name} userId={s.id} size="md" />
+                <Avatar name={s.name} userId={s.id} uri={s.image ?? undefined} size="md" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowName}>{s.name ?? 'Someone'}</Text>
                   <Text style={styles.rowMeta}>Request sent · waiting</Text>
