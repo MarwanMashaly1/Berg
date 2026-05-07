@@ -540,11 +540,12 @@ circlesRoutes.post('/:id/join', async (c) => {
       .limit(1);
 
     if (existingChat) {
-      // Chat already exists -- add the new member
+      // Chat already exists -- add the new member, marking all prior messages as read
       chatId = existingChat.id;
+      const now = new Date();
       await db
         .insert(chatMembers)
-        .values({ chatId, userId: me.id, joinedAt: new Date() })
+        .values({ chatId, userId: me.id, joinedAt: now, lastReadAt: now })
         .onConflictDoNothing();
     } else {
       // No chat yet -- create one and add ALL current active members
@@ -565,9 +566,10 @@ circlesRoutes.post('/:id/join', async (c) => {
         .where(and(eq(groupCircleMembers.groupCircleId, circleId), eq(groupCircleMembers.status, 'active')));
 
       if (activeMembers.length > 0) {
+        const now = new Date();
         await db
           .insert(chatMembers)
-          .values(activeMembers.map(m => ({ chatId: newChat.id, userId: m.userId, joinedAt: new Date() })))
+          .values(activeMembers.map(m => ({ chatId: newChat.id, userId: m.userId, joinedAt: now, lastReadAt: now })))
           .onConflictDoNothing();
       }
 

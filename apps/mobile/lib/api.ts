@@ -122,6 +122,10 @@ export async function patchUser(fields: Record<string, unknown>) {
   });
 }
 
+export function deleteAccount() {
+  return apiFetch<{ ok: boolean }>('/api/users/me', { method: 'DELETE' });
+}
+
 export async function checkUsername(username: string) {
   return apiFetch<{ available: boolean; reason?: string }>(
     `/api/users/check-username?username=${encodeURIComponent(username)}`,

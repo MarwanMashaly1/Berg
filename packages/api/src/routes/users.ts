@@ -4,7 +4,11 @@ import { z } from 'zod';
 import { eq, inArray, or, ilike, ne, and, sql } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'crypto';
 import { db } from '../db.js';
-import { users, userVibeTags, vibeTags, inviteLinks, circles } from '@berg/shared';
+import {
+  users, userVibeTags, vibeTags, inviteLinks, circles,
+  groupCircles, memoryPhotos, motives, promptResponses,
+  motiveMemories, messages, chatMembers,
+} from '@berg/shared';
 import { enqueue } from '../lib/queue.js';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin, AVATARS_BUCKET } from '../lib/supabase-admin.js';
@@ -27,6 +31,9 @@ export const userRoutes = new Hono<{ Variables: Variables }>();
 
 // All routes require authentication
 userRoutes.use('*', requireAuth);
+
+// ─── Public user routes (no auth required) ────────────────────────────────────
+export const userPublicRoutes = new Hono<{ Variables: Variables }>();
 
 // GET /api/users/me -- return current user (explicit projection, no phone data)
 userRoutes.get('/me', async (c) => {
@@ -320,4 +327,179 @@ userRoutes.post('/me/push-token', async (c) => {
   }
   await db.update(users).set({ expoPushToken: body.token }).where(eq(users.id, me.id));
   return c.json({ ok: true });
+});
+
+// DELETE /api/users/me -- GDPR right to erasure: permanently delete account and all user data
+userRoutes.delete('/me', async (c) => {
+  const me = c.get('user');
+  if (!me) return c.json({ error: 'Unauthorized' }, 401);
+
+  try {
+    // 1. Remove avatar from Supabase storage
+    const avatarExts = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
+    await supabaseAdmin.storage
+      .from(AVATARS_BUCKET)
+      .remove(avatarExts.map(ext => `${me.id}/avatar.${ext}`))
+      .catch(() => {});
+
+    // 2. Delete memory photos uploaded by this user (no FK cascade on uploadedBy)
+    const userPhotos = await db
+      .select({ photoUrl: memoryPhotos.photoUrl })
+      .from(memoryPhotos)
+      .where(eq(memoryPhotos.uploadedBy, me.id));
+    if (userPhotos.length > 0) {
+      const paths = userPhotos
+        .map(p => p.photoUrl.split('/storage/v1/object/public/')[1])
+        .filter(Boolean);
+      if (paths.length > 0) {
+        const bucket = paths[0].split('/')[0];
+        const filePaths = paths.map(p => p.replace(`${bucket}/`, ''));
+        await supabaseAdmin.storage.from(bucket).remove(filePaths).catch(() => {});
+      }
+      await db.delete(memoryPhotos).where(eq(memoryPhotos.uploadedBy, me.id));
+    }
+
+    // 3. Delete group circles this user admins (FK adminUserId has no cascade)
+    await db.delete(groupCircles).where(eq(groupCircles.adminUserId, me.id));
+
+    // 4. Delete the user row — cascades sessions, accounts, circles, motives,
+    //    attendees, messages, memories, prompt responses, notifications, etc.
+    await db.delete(users).where(eq(users.id, me.id));
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error('[delete-account] Error:', err);
+    return c.json({ error: 'Failed to delete account' }, 500);
+  }
+});
+
+// GET /api/users/me/export -- GDPR right to data portability: full data export as JSON
+userRoutes.get('/me/export', async (c) => {
+  const me = c.get('user');
+  if (!me) return c.json({ error: 'Unauthorized' }, 401);
+
+  const [
+    profile,
+    myCircles,
+    myMotives,
+    myPromptResponses,
+    myMemories,
+    myMessages,
+  ] = await Promise.all([
+    db.select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      displayName: users.displayName,
+      username: users.username,
+      bio: users.bio,
+      availabilityStatus: users.availabilityStatus,
+      createdAt: users.createdAt,
+    }).from(users).where(eq(users.id, me.id)).limit(1),
+
+    db.select({
+      friendId: circles.friendId,
+      status: circles.status,
+      createdAt: circles.createdAt,
+    }).from(circles).where(eq(circles.userId, me.id)),
+
+    db.select({
+      id: motives.id,
+      title: motives.title,
+      category: motives.category,
+      description: motives.description,
+      scheduledAt: motives.scheduledAt,
+      venueName: motives.venueName,
+      status: motives.status,
+      createdAt: motives.createdAt,
+    }).from(motives).where(eq(motives.creatorId, me.id)),
+
+    db.select({
+      promptId: promptResponses.promptId,
+      optionKey: promptResponses.optionKey,
+      storyText: promptResponses.storyText,
+      respondedAt: promptResponses.respondedAt,
+    }).from(promptResponses).where(eq(promptResponses.userId, me.id)),
+
+    db.select({
+      motiveId: motiveMemories.motiveId,
+      vibeTags: motiveMemories.vibeTags,
+      rating: motiveMemories.rating,
+      createdAt: motiveMemories.createdAt,
+    }).from(motiveMemories).where(eq(motiveMemories.userId, me.id)),
+
+    db.select({
+      content: messages.content,
+      chatId: messages.chatId,
+      createdAt: messages.createdAt,
+    }).from(messages).where(eq(messages.senderId, me.id)).limit(10000),
+  ]);
+
+  c.header('Content-Type', 'application/json');
+  c.header('Content-Disposition', `attachment; filename="berg-data-export-${me.id}.json"`);
+  return c.json({
+    exportedAt: new Date().toISOString(),
+    profile: profile[0] ?? null,
+    connections: myCircles,
+    motives: myMotives,
+    promptResponses: myPromptResponses,
+    memories: myMemories,
+    messages: myMessages,
+  });
+});
+
+// POST /api/users/deletion-request -- public (no auth): Play Store / GDPR data deletion request form
+// Sends notification to admin, does not auto-delete (manual review within 30 days)
+userPublicRoutes.post('/deletion-request', zValidator('json', z.object({
+  email: z.string().email(),
+  reason: z.string().max(500).optional(),
+})), async (c) => {
+  const { email, reason } = c.req.valid('json');
+  const adminEmail = process.env.ADMIN_EMAIL ?? 'marwanmashaly@gmail.com';
+
+  try {
+    if (process.env.RESEND_API_KEY) {
+      const { Resend } = await import('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
+
+      // Notify admin
+      await resend.emails.send({
+        from: 'Berg <info@salamcity.ca>',
+        to: adminEmail,
+        subject: `[Berg] Data deletion request from ${email}`,
+        html: `
+          <p><strong>Data deletion request received</strong></p>
+          <p><strong>Email:</strong> ${email}</p>
+          ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+          <p><strong>Submitted at:</strong> ${new Date().toISOString()}</p>
+          <hr>
+          <p>Process this request within 30 days. Use the admin panel or DELETE /api/users/me on behalf of the user.</p>
+        `,
+      });
+
+      // Confirm to user
+      await resend.emails.send({
+        from: 'Berg <info@salamcity.ca>',
+        to: email,
+        subject: 'Your Berg data deletion request',
+        html: `
+          <p>Hi,</p>
+          <p>We've received your request to delete your Berg account and all associated data.</p>
+          <p>We will process your request within <strong>30 days</strong> and delete all personal data linked to <strong>${email}</strong>.</p>
+          <p>If you have the Berg app installed, you can also delete your account immediately from <strong>Settings → Delete account</strong>.</p>
+          <p>If you have questions, reply to this email or contact us at <a href="mailto:support@berg.app">support@berg.app</a>.</p>
+          <br>
+          <p>— The Berg team</p>
+        `,
+      });
+    } else {
+      console.log(`[deletion-request] No RESEND_API_KEY — request from ${email} logged only`);
+    }
+
+    console.log(`[deletion-request] Received from ${email.slice(0, 3)}***`);
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error('[deletion-request] Error:', err);
+    return c.json({ error: 'Failed to submit request' }, 500);
+  }
 });

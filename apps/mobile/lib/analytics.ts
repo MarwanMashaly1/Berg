@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { posthog } from './posthog';
 
 // ─── Identify / reset ─────────────────────────────────────────────────────────
@@ -7,10 +8,33 @@ export function identifyUser(id: string, props: { name?: string | null; email?: 
     name: props.name ?? undefined,
     email: props.email ?? undefined,
   });
+  // Sync to Sentry so errors are attributed to the right user
+  Sentry.setUser({ id, username: props.name ?? undefined, email: props.email ?? undefined });
 }
 
 export function resetUser() {
   posthog.reset();
+  Sentry.setUser(null);
+}
+
+// ─── Error capture ────────────────────────────────────────────────────────────
+
+/**
+ * Report an error to both Sentry (primary) and PostHog (user timeline).
+ * Call this in catch blocks for API errors, auth failures, etc.
+ */
+export function captureError(err: unknown, context?: Record<string, unknown>) {
+  // Sentry — full stack trace, source maps, release info
+  Sentry.captureException(err, context ? { extra: context } : undefined);
+
+  // PostHog — surfaces the error on the user's event timeline
+  const message = err instanceof Error ? err.message : String(err);
+  posthog.capture('$exception', {
+    $exception_message: message,
+    $exception_type: err instanceof Error ? err.constructor.name : 'Error',
+    $exception_stack_trace_raw: err instanceof Error ? err.stack : undefined,
+    ...context,
+  });
 }
 
 // ─── Screen tracking ──────────────────────────────────────────────────────────

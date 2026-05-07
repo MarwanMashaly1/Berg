@@ -1,4 +1,8 @@
 ﻿import 'dotenv/config';
+// Sentry must be initialized before any other imports that might throw
+import { initSentry, sentryCaptureException } from './lib/sentry.js';
+initSentry();
+
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
@@ -6,7 +10,7 @@ import { auth } from './auth';
 import { sessionMiddleware } from './middleware/auth';
 import { phoneRoutes } from './routes/phone';
 import { verifyCodeRoutes } from './routes/verify-code';
-import { userRoutes } from './routes/users.js';
+import { userRoutes, userPublicRoutes } from './routes/users.js';
 import { vibeTagRoutes } from './routes/vibe-tags.js';
 import { promptRoutes } from './routes/prompts.js';
 import { discoveryRoutes, circlesRoutes } from './routes/discovery.js';
@@ -36,11 +40,29 @@ app.use('*', async (c, next) => {
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
 });
 
-// --- Request logger ----------------------------------------------------------
+// --- Request logger + performance tracking -----------------------------------
 app.use('*', async (c, next) => {
+  const start = Date.now();
   console.log(`-> ${c.req.method} ${c.req.path}`);
   await next();
-  console.log(`<- ${c.req.method} ${c.req.path} ${c.res.status}`);
+  const ms = Date.now() - start;
+  const status = c.res.status;
+  console.log(`<- ${c.req.method} ${c.req.path} ${status} ${ms}ms`);
+
+  // Capture slow requests (>2s) to PostHog for performance visibility
+  if (ms > 2000) {
+    const userId = c.get('user')?.id;
+    posthog.capture({
+      distinctId: userId ?? 'server',
+      event: 'api_slow_request',
+      properties: {
+        path: c.req.path,
+        method: c.req.method,
+        status,
+        duration_ms: ms,
+      },
+    });
+  }
 });
 
 // --- CORS --------------------------------------------------------------------
@@ -62,6 +84,17 @@ app.use(
 // --- Session middleware -- MUST run before route handlers that need auth ------
 // Health check — no auth, used by UptimeRobot to keep the server alive
 app.get('/health', (c) => c.json({ ok: true }));
+
+// Magic link deep-link redirect — receives token from email button, redirects to app
+// WITHOUT consuming the token. App then calls /api/auth/verify-code for the one real verification.
+app.get('/api/auth/magic-link-open', (c) => {
+  const token = c.req.query('token');
+  if (!token) return c.text('Bad request', 400);
+  return c.redirect(`berg://magic-link-callback?token=${encodeURIComponent(token)}`);
+});
+
+// Public user routes (no auth) — must be before sessionMiddleware
+app.route('/api/users', userPublicRoutes);
 
 app.use('/api/*', sessionMiddleware);
 
@@ -95,6 +128,8 @@ app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
     return res;
   } catch (err) {
     console.error('🔴 Auth handler error:', err);
+    sentryCaptureException(err, { path: c.req.path, method: c.req.method });
+    captureException(err, undefined, { path: c.req.path, method: c.req.method, source: 'better-auth' });
     return c.json({ error: String(err) }, 500);
   }
 });
@@ -102,8 +137,11 @@ app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.onError((err, c) => {
   const userId = c.get('user')?.id;
+  const ctx = { path: c.req.path, method: c.req.method };
   console.error(`[error] ${c.req.method} ${c.req.path}:`, err);
-  captureException(err, userId, { path: c.req.path, method: c.req.method });
+  // Dual-report: Sentry for full stack traces + source maps, PostHog for user timeline
+  sentryCaptureException(err, { userId, ...ctx });
+  captureException(err, userId, ctx);
   return c.json({ error: 'Internal server error' }, 500);
 });
 
@@ -117,6 +155,21 @@ serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Berg API running on http://localhost:${info.port}`);
   // Start pg-boss workers after server is up
   startWorkers().catch((err) => console.error('[workers] Failed to start:', err));
+});
+
+// ─── Process-level safety nets ────────────────────────────────────────────────
+// These catch anything that escapes Hono's onError (e.g. bg workers, timers)
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+  sentryCaptureException(err, { extra: { source: 'uncaughtException' } });
+  captureException(err, undefined, { source: 'uncaughtException' });
+});
+
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  console.error('[unhandledRejection]', err);
+  sentryCaptureException(err, { extra: { source: 'unhandledRejection' } });
+  captureException(err, undefined, { source: 'unhandledRejection' });
 });
 
 process.on('SIGTERM', () => posthog.shutdown());

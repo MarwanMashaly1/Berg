@@ -31,7 +31,7 @@ const createMotiveSchema = z.object({
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
   note: z.string().max(500).nullable().optional(),
-  invitedUserIds: z.array(z.string().uuid()).max(50).default([]),
+  invitedUserIds: z.array(z.string().min(1)).max(50).default([]),
   invitedCircleIds: z.array(z.string().uuid()).max(20).default([]),
 });
 

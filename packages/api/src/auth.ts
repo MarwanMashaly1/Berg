@@ -108,10 +108,15 @@ export const auth = betterAuth({
             ?? 'berg://auth/magic-link-callback';
           const urlToken = parsedUrl.searchParams.get('token') ?? rawToken ?? '';
 
-          // Standard HTTP link (via BetterAuth verify endpoint)
-          // Email clients (like Gmail) block custom schemes like 'exp://' or 'app.berg.social://'.
-          // Using the HTTP link ensures the button opens a browser, verifies the token, and 302 redirects to the app.
-          const emailLink = url;
+          // Redirect-only link: browser hits /api/auth/magic-link-open which immediately
+          // 302s to berg://magic-link-callback?token=xxx WITHOUT consuming the token.
+          // The app then calls /api/auth/verify-code for the single real verification.
+          // (Using BetterAuth's own verify URL would consume the token in the browser,
+          // leaving the app with nothing to verify against.)
+          const apiBase = process.env.BETTER_AUTH_URL ?? parsedUrl.origin;
+          const emailLink = urlToken
+            ? `${apiBase}/api/auth/magic-link-open?token=${encodeURIComponent(urlToken)}`
+            : url;
 
           // Generate 8-char short code for manual entry fallback
           let shortCode: string | undefined;

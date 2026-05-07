@@ -3,10 +3,11 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
 import { db } from '../db';
-import { pendingPhone } from '@berg/shared';
+import { pendingPhone, users } from '@berg/shared';
 import { randomUUID } from 'crypto';
-import { eq } from 'drizzle-orm';
+import { eq, and, gt } from 'drizzle-orm';
 import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
+import { auth } from '../auth.js';
 
 export const phoneRoutes = new Hono();
 
@@ -52,4 +53,40 @@ phoneRoutes.post('/start', zValidator('json', startSchema), async (c) => {
   });
 
   return c.json({ sessionId, expiresAt: expiresAt.toISOString() });
+});
+
+// POST /api/phone/link — link a pending phone number to the authenticated user
+phoneRoutes.post('/link', async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session?.user) return c.json({ error: 'Unauthorized' }, 401);
+
+  let sessionId: string;
+  try {
+    const body = await c.req.json<{ sessionId?: string }>();
+    sessionId = body.sessionId ?? '';
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+  if (!sessionId) return c.json({ error: 'sessionId is required' }, 400);
+
+  const pending = await db
+    .select()
+    .from(pendingPhone)
+    .where(and(eq(pendingPhone.sessionId, sessionId), gt(pendingPhone.expiresAt, new Date())))
+    .limit(1);
+
+  if (!pending[0]) return c.json({ error: 'Invalid or expired session' }, 400);
+
+  const { encryptPhone, hashPhone } = await import('../utils/crypto.js');
+  const encryptedPhone = encryptPhone(pending[0].phoneNumber);
+  const phoneHash = hashPhone(pending[0].phoneNumber);
+
+  await db
+    .update(users)
+    .set({ phoneNumber: encryptedPhone, phoneHash, phoneVerified: true } as any)
+    .where(eq(users.id, session.user.id));
+
+  await db.delete(pendingPhone).where(eq(pendingPhone.sessionId, sessionId));
+
+  return c.json({ ok: true });
 });
