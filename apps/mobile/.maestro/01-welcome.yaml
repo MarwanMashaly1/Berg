@@ -1,0 +1,23 @@
+# E2E: Welcome screen loads and CTAs are interactive
+# Run: maestro test .maestro/01-welcome.yaml
+appId: ca.berg.app
+
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "BERG"
+- assertVisible: "The group chat"
+- assertVisible: "Get started"
+- assertVisible: "Have an account?"
+
+# Tapping "Get started" navigates to signup
+- tapOn: "Get started"
+- assertVisible: "Enter your email"
+
+# Back to welcome
+- pressKey: Back
+
+# Legal links visible
+- assertVisible: "Terms of Service"
+- assertVisible: "Privacy Policy"

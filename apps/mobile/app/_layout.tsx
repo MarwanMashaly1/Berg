@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { View, LogBox } from 'react-native';
-import { Stack, useNavigationContainerRef } from 'expo-router';
+import { Stack, useNavigationContainerRef, usePathname } from 'expo-router';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 // Suppress all dev overlays — Sentry captures everything
@@ -10,6 +10,15 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PostHogProvider } from 'posthog-react-native';
 import { posthog } from '../lib/posthog';
+
+// Auto-tracks every route change to PostHog — placed inside the navigator
+function ScreenTracker() {
+  const pathname = usePathname();
+  useEffect(() => {
+    if (pathname) posthog.screen(pathname);
+  }, [pathname]);
+  return null;
+}
 import {
   useFonts,
   Fraunces_400Regular,
@@ -38,8 +47,7 @@ Sentry.init({
   // Sample 20% of sessions for performance traces — full coverage for errors
   tracesSampleRate: __DEV__ ? 1.0 : 0.2,
   integrations: [navigationIntegration],
-  // PII: names + emails help triage; disable if you want stricter privacy
-  sendDefaultPii: true,
+  sendDefaultPii: false,
   // Don't enable in dev — Sentry's own logs pollute Metro output
   enabled: !__DEV__,
 });
@@ -102,6 +110,7 @@ export default Sentry.wrap(function RootLayout() {
               <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="(app)" />
             </Stack>
+            <ScreenTracker />
           </QueryClientProvider>
         </GestureHandlerRootView>
       </PostHogProvider>

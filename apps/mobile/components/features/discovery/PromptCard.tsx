@@ -26,9 +26,9 @@ function useBounce() {
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   function bounce() {
     scale.value = withSequence(
-      withTiming(0.88, { duration: 70 }),
-      withSpring(1.06, { damping: 6, stiffness: 300 }),
-      withSpring(1.0,  { damping: 10, stiffness: 200 }),
+      withTiming(0.93, { duration: 60 }),
+      withSpring(1.03, { damping: 14, stiffness: 300 }),
+      withSpring(1.0,  { damping: 18, stiffness: 220 }),
     );
   }
   return { animStyle, bounce };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, ViewStyle } from 'react-native';
+import { View, Text, Image, ViewStyle, StyleProp } from 'react-native';
 import { useTheme } from '../../hooks/use-theme';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -35,7 +35,7 @@ type AvatarProps = {
   name?: string | null;
   userId?: string | null;
   size?: Size;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 };
 
 function getInitials(name: string): string {

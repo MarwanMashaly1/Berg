@@ -10,7 +10,7 @@ import { getSetCookie } from '@better-auth/expo/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/theme';
 import { authClient } from '../../lib/auth';
-import { identifyUser } from '../../lib/analytics';
+import { identifyUser, captureError } from '../../lib/analytics';
 
 // Must match the storagePrefix in lib/auth.ts → 'berg' + '_cookie'
 const COOKIE_KEY = 'berg_cookie';
@@ -100,6 +100,7 @@ export default function MagicLinkSentScreen() {
       }
     } catch (e) {
       console.error('[verify] error:', e);
+      captureError(e, { screen: 'magic-link-sent', action: 'verify-code' });
       setError('Something went wrong. Please try again.');
     } finally {
       setVerifying(false);
@@ -175,7 +176,7 @@ export default function MagicLinkSentScreen() {
           activeOpacity={0.85}
         >
           {verifying
-            ? <ActivityIndicator color="#fff" size="small" />
+            ? <ActivityIndicator color={C.textInverse} size="small" />
             : <Text style={styles.verifyBtnText}>Sign in</Text>
           }
         </TouchableOpacity>
@@ -247,8 +248,11 @@ const styles = StyleSheet.create({
 
   headline: {
     fontFamily: Fonts.heading,
-    fontSize: 34, color: C.text,
-    lineHeight: 40, letterSpacing: -0.5,
+    fontSize: 34,
+    fontStyle: 'italic',
+    color: C.text,
+    lineHeight: 40,
+    letterSpacing: -0.5,
     marginBottom: 14,
   },
   rule: {

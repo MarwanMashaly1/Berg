@@ -1,28 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack, router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { authClient } from '../../lib/auth';
+
+// Must match storagePrefix ('berg') + '_cookie' in lib/auth.ts
+const SESSION_COOKIE_KEY = 'berg_cookie';
 
 export default function AppLayout() {
   const { data: session, isPending } = authClient.useSession();
   const everHadSession = useRef(false);
-  // Grace period: don't redirect on the very first render — BetterAuth's atom
-  // may report isPending=false briefly before hydrating from SecureStore.
-  const [settled, setSettled] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setSettled(true), 300);
-    return () => clearTimeout(t);
-  }, []);
 
   useEffect(() => {
     if (session) {
       everHadSession.current = true;
       return;
     }
-    if (settled && !isPending && !everHadSession.current) {
-      router.replace('/(auth)/welcome');
-    }
-  }, [session, isPending, settled]);
+    // Still loading — wait
+    if (isPending) return;
+    // Already confirmed a session this mount — brief null between navigations
+    if (everHadSession.current) return;
+    // Cookie in SecureStore means BetterAuth is still hydrating the atom.
+    // Don't redirect — it will resolve to a session within the next render cycle.
+    // (Timer-based grace periods fail on slow devices and cause this exact bug.)
+    const storedCookie = SecureStore.getItem(SESSION_COOKIE_KEY);
+    if (storedCookie) return;
+    router.replace('/(auth)/welcome');
+  }, [session, isPending]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

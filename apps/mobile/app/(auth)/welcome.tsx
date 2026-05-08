@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, useWindowDimensions, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Colors, Fonts } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
@@ -7,6 +7,10 @@ import { GrainTexture } from '../../components/ui/GrainTexture';
 const C = Colors.light;
 
 export default function WelcomeScreen() {
+  const { width } = useWindowDimensions();
+  const headlineFontSize = width < 360 ? 32 : 40;
+  const headlineLineHeight = width < 360 ? 38 : 46;
+
   return (
     <SafeAreaView style={styles.safe}>
       <GrainTexture />
@@ -25,7 +29,7 @@ export default function WelcomeScreen() {
             <Text style={styles.wordmarkText}>BERG</Text>
           </View>
 
-          <Text style={styles.headline}>
+          <Text style={[styles.headline, { fontSize: headlineFontSize, lineHeight: headlineLineHeight }]}>
             The group chat{'\n'}that becomes{'\n'}
             <Text style={styles.headlineAccent}>the real thing.</Text>
           </Text>
@@ -61,7 +65,10 @@ export default function WelcomeScreen() {
         </View>
 
         <Text style={styles.legal}>
-          By continuing you agree to our Terms of Service and Privacy Policy.
+          By continuing you agree to our{' '}
+          <Text style={styles.legalLink} onPress={() => Linking.openURL('https://berg.app/terms')}>Terms of Service</Text>
+          {' '}and{' '}
+          <Text style={styles.legalLink} onPress={() => Linking.openURL('https://berg.app/privacy')}>Privacy Policy</Text>.
         </Text>
 
       </View>
@@ -80,10 +87,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 380,
-    backgroundColor: 'rgba(255,107,53,0.11)',
-    borderTopLeftRadius: 60,
-    borderTopRightRadius: 60,
+    height: 220,
+    backgroundColor: 'rgba(255,107,53,0.10)',
+    borderTopLeftRadius: 120,
+    borderTopRightRadius: 120,
   },
   container: {
     flex: 1,
@@ -101,7 +108,7 @@ const styles = StyleSheet.create({
   wordmarkText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 11,
-    color: '#FF6B35',
+    color: C.primary,
     letterSpacing: 2,
   },
   hero: {
@@ -143,10 +150,10 @@ const styles = StyleSheet.create({
   },
   primaryBtn: {
     backgroundColor: C.primary,
-    borderRadius: 16,
+    borderRadius: 14,
   },
   primaryBtnText: {
-    color: '#FFFFFF',
+    color: C.textInverse,
     fontFamily: Fonts.bodySemiBold,
   },
   signinRow: {
@@ -168,5 +175,9 @@ const styles = StyleSheet.create({
     color: 'rgba(242,232,220,0.25)',
     textAlign: 'center',
     lineHeight: 16,
+  },
+  legalLink: {
+    color: 'rgba(242,232,220,0.5)',
+    textDecorationLine: 'underline',
   },
 });

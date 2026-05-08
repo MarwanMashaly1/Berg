@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { Colors, Fonts } from '../../../constants/theme';
 import { PersonSuggestion } from '../../../lib/api';
@@ -71,7 +72,7 @@ function SeeMoreCard({ count }: { count: number }) {
       <Text style={styles.seeMoreLabel}>See more</Text>
       <Text style={styles.seeMoreSub}>people you might know</Text>
       <View style={styles.seeMoreArrow}>
-        <View style={styles.arrowChevron} />
+        <MaterialIcons name="chevron-right" size={16} color={C.textInverse} />
       </View>
     </TouchableOpacity>
   );
@@ -193,7 +194,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tag: {
-    backgroundColor: '#FFF0E8',
+    backgroundColor: C.primaryMuted,
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -203,7 +204,7 @@ const styles = StyleSheet.create({
   tagText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 10,
-    color: '#C4530A',
+    color: C.primary,
   },
   connectBtn: {
     marginTop: 'auto' as any,
@@ -268,12 +269,5 @@ const styles = StyleSheet.create({
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: C.primary,
     alignItems: 'center', justifyContent: 'center',
-  },
-  arrowChevron: {
-    width: 7, height: 7,
-    borderRightWidth: 2, borderTopWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '45deg' }],
-    marginLeft: -3,
   },
 });

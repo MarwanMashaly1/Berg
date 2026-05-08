@@ -16,6 +16,7 @@ import * as Linking from 'expo-linking';
 import { Colors, Fonts } from '../../constants/theme';
 import { GrainTexture } from '../../components/ui/GrainTexture';
 import { authClient } from '../../lib/auth';
+import { captureError } from '../../lib/analytics';
 
 // Apple Sign-In is iOS-only — guard both import and usage
 const isIOS = Platform.OS === 'ios';
@@ -60,6 +61,7 @@ export default function SignUpScreen() {
       });
       router.push({ pathname: '/(auth)/magic-link-sent', params: { email } });
     } catch (err: unknown) {
+      captureError(err, { screen: 'signup', action: 'magic-link' });
       setEmailError(
         err instanceof Error ? err.message : 'Something went wrong. Please try again.'
       );
@@ -79,6 +81,7 @@ export default function SignUpScreen() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       if (message && !message.toLowerCase().includes('cancel')) {
+        captureError(err, { screen: 'signup', action: 'google-sign-in' });
         setGoogleError('Google sign-in failed. Try again or use email.');
       }
     } finally {
@@ -96,6 +99,7 @@ export default function SignUpScreen() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       if (message && !message.toLowerCase().includes('cancel')) {
+        captureError(err, { screen: 'signup', action: 'apple-sign-in' });
         setAppleError('Apple sign-in failed. Try again or use email.');
       }
     } finally {
@@ -241,7 +245,7 @@ const styles = StyleSheet.create({
   backText: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: '#b0a090',
+    color: C.textTertiary,
   },
   // More padding at the bottom shifts content upward, equalising visual space
   centerBlock: {
@@ -253,6 +257,7 @@ const styles = StyleSheet.create({
   headline: {
     fontFamily: Fonts.heading,
     fontSize: 34,
+    fontStyle: 'italic',
     color: C.text,
     lineHeight: 40,
     letterSpacing: -0.5,
@@ -283,7 +288,7 @@ const styles = StyleSheet.create({
   emailLabel: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 9,
-    color: '#b0a090',
+    color: C.textTertiary,
     letterSpacing: 0.8,
     marginBottom: 4,
   },
@@ -314,7 +319,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 15,
-    color: '#fff',
+    color: C.textInverse,
   },
   divider: {
     flexDirection: 'row',
@@ -325,21 +330,21 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e0d5c8',
+    backgroundColor: C.border,
   },
   dividerText: {
     fontFamily: Fonts.body,
     fontSize: 12,
-    color: '#c0b0a0',
+    color: C.textTertiary,
   },
   socialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#fff',
+    backgroundColor: C.surface,
     borderWidth: 1.5,
-    borderColor: '#e0d5c8',
+    borderColor: C.border,
     borderRadius: 14,
     paddingVertical: 14,
     marginBottom: 12,
@@ -347,7 +352,7 @@ const styles = StyleSheet.create({
   socialBtnText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 14,
-    color: '#555',
+    color: C.textSecondary,
   },
   googleG: {
     fontFamily: Fonts.bodySemiBold,

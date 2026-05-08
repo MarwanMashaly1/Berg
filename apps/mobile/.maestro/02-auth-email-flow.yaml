@@ -1,0 +1,31 @@
+# E2E: Email auth flow — enter email, see magic link sent confirmation
+# Run: maestro test .maestro/02-auth-email-flow.yaml
+# Requires: dev server running (EXPO_PUBLIC_API_URL set)
+appId: ca.berg.app
+
+---
+- launchApp:
+    clearState: true
+
+# Navigate to signup
+- tapOn: "Get started"
+- assertVisible: "Enter your email"
+
+# Type a test email
+- tapOn:
+    id: "email-input"
+- inputText: "test@example.com"
+
+# Submit
+- tapOn: "Continue"
+
+# Should land on magic-link-sent screen
+- assertVisible:
+    text: "Check your inbox"
+    timeout: 5000
+
+# Shows the email they entered
+- assertVisible: "test@example.com"
+
+# Back link is present
+- assertVisible: "Wrong email?"
