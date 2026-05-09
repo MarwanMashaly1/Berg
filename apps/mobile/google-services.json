@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "543150763343",
+    "project_id": "icebreaker-494023",
+    "storage_bucket": "icebreaker-494023.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:543150763343:android:136f050ff0efbaa828e93a",
+        "android_client_info": {
+          "package_name": "app.berg.social"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDTEsvlqepxVOqrg-uHnfOGhigEGEldung"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
