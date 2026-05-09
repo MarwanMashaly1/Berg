@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
 import { Colors, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -25,11 +24,8 @@ export default function Step4() {
     setError('');
     try {
       const fullPhone = `${countryCode}${trimmed}`;
-      await apiFetch('/api/phone/start', { method: 'POST', body: JSON.stringify({ phoneNumber: fullPhone }) });
-      await Promise.all([
-        SecureStore.setItemAsync('phone_session', 'onboarding'),
-        SecureStore.setItemAsync('phone_number', fullPhone),
-      ]);
+      const { sessionId } = await apiFetch<{ sessionId: string }>('/api/phone/start', { method: 'POST', body: JSON.stringify({ phoneNumber: fullPhone }) });
+      await apiFetch('/api/phone/link', { method: 'POST', body: JSON.stringify({ sessionId }) });
       await patchUser({ onboardingStep: '4' });
       router.push('/(app)/onboarding/step-5');
     } catch (err: unknown) {
@@ -72,7 +68,7 @@ export default function Step4() {
         <View style={{ gap: 12 }}>
           <Button label="Add number" onPress={handleSubmit} loading={saving} fullWidth size="lg" style={styles.btn} textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }} />
           <TouchableOpacity onPress={skip} style={{ alignItems: 'center', paddingVertical: 8 }}>
-            <Text style={{ fontFamily: Fonts.body, fontSize: 14, color: '#b0a090' }}>Skip for now</Text>
+            <Text style={{ fontFamily: Fonts.body, fontSize: 14, color: C.textTertiary }}>Skip for now</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -83,8 +79,8 @@ export default function Step4() {
 const styles = StyleSheet.create({
   header: { marginBottom: 32 },
   content: { flex: 1, paddingBottom: 32 },
-  heading: { fontFamily: Fonts.heading, fontSize: 34, color: C.text, lineHeight: 40, letterSpacing: -0.5, marginBottom: 14 },
+  heading: { fontFamily: Fonts.heading, fontSize: 34, fontStyle: 'italic', color: C.text, lineHeight: 40, letterSpacing: -0.5, marginBottom: 14 },
   rule: { width: 32, height: 2, backgroundColor: C.primary, borderRadius: 2, marginBottom: 14 },
-  sub: { fontFamily: Fonts.body, fontSize: 15, color: '#9a8a7a', lineHeight: 22 },
+  sub: { fontFamily: Fonts.body, fontSize: 15, color: C.textSecondary, lineHeight: 22 },
   btn: { backgroundColor: C.text, borderRadius: 14 },
 });

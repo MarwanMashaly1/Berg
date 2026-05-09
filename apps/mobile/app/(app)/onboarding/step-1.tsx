@@ -214,13 +214,14 @@ const styles = StyleSheet.create({
   heading: {
     fontFamily: Fonts.heading,
     fontSize: 36,
+    fontStyle: 'italic',
     color: C.text,
     lineHeight: 42,
     letterSpacing: -0.5,
     marginBottom: 14,
   },
   rule: { width: 32, height: 2, backgroundColor: C.primary, borderRadius: 2, marginBottom: 14 },
-  sub: { fontFamily: Fonts.body, fontSize: 15, color: '#9a8a7a', lineHeight: 22, marginBottom: 28 },
+  sub: { fontFamily: Fonts.body, fontSize: 15, color: C.textSecondary, lineHeight: 22, marginBottom: 28 },
 
   // Avatar
   avatarWrap: {
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
   photoHint: {
     fontFamily: Fonts.body,
     fontSize: 12,
-    color: '#b0a090',
+    color: C.textTertiary,
     textAlign: 'center',
     marginBottom: 8,
   },

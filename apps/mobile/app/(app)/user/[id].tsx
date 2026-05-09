@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView,
 } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../../constants/theme';
@@ -76,7 +77,7 @@ export default function PublicUserProfile() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <View style={styles.chevron} />
+          <MaterialIcons name="arrow-back-ios" size={16} color="rgba(242,232,220,0.8)" />
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
       </View>
@@ -163,13 +164,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
-  chevron: {
-    width: 9, height: 9,
-    borderLeftWidth: 2, borderBottomWidth: 2,
-    borderColor: 'rgba(242,232,220,0.8)',
-    transform: [{ rotate: '45deg' }],
-    marginLeft: 3,
-  },
 
   // Hero
   hero: {
@@ -190,7 +184,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 3,
     borderColor: '#1A1512',
-    shadowColor: '#FF6B35',
+    shadowColor: C.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
@@ -227,7 +221,7 @@ const styles = StyleSheet.create({
   },
   connectBtn: {
     backgroundColor: C.text,
-    borderRadius: 16,
+    borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: C.cardShadowColor,
@@ -251,7 +245,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: C.textInverse,
   },
-  connectTextDone: { color: '#2D6A4F' },
+  connectTextDone: { color: C.success },
   connectTextPending: { color: C.textSecondary },
 
   // Vibe tags

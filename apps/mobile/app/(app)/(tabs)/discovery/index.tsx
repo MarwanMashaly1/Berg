@@ -10,6 +10,7 @@ import {
   Modal,
   FlatList,
   Animated,
+  useWindowDimensions,
 } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
@@ -68,7 +69,8 @@ function InboxSheet({
   onTapItem,
 }: InboxSheetProps) {
   const insets = useSafeAreaInsets();
-  const slideAnim = useRef(new Animated.Value(600)).current;
+  const { height: screenHeight } = useWindowDimensions();
+  const slideAnim = useRef(new Animated.Value(screenHeight)).current;
 
   useEffect(() => {
     if (visible) {
@@ -249,7 +251,7 @@ export default function DiscoveryScreen() {
               optionKey,
               optionIndex,
               storyText: storyText ?? null,
-              answeredAt: new Date().toISOString(),
+              respondedAt: new Date().toISOString(),
             },
           }
         : prev,
@@ -267,9 +269,15 @@ export default function DiscoveryScreen() {
     }
   }
 
-  function handleMakePlan(_userIds: string[]) {
+  function handleMakePlan(userIds: string[]) {
     setShowReveal(false);
-    router.push("/(app)/(tabs)/motives");
+    const users = (matchResult?.matches ?? [])
+      .filter(m => userIds.includes(m.userId))
+      .map(m => ({ id: m.userId, name: m.name, username: null }));
+    router.push({
+      pathname: '/(app)/(tabs)/motives/create' as any,
+      params: { prefillUsers: JSON.stringify(users) },
+    });
   }
 
   function handlePulseAction(card: PulseCard) {
@@ -401,7 +409,7 @@ export default function DiscoveryScreen() {
         <View style={styles.promptWrapper}>
           {promptLoading ? (
             <View style={styles.promptSkeleton}>
-              <ActivityIndicator color="#FF6B35" />
+              <ActivityIndicator color={C.primary} />
             </View>
           ) : promptError ? (
             <View style={styles.promptError}>
@@ -512,7 +520,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 9,
-    color: "#fff",
+    color: C.textInverse,
     lineHeight: 11,
   },
 
@@ -520,13 +528,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 6,
     fontSize: 11,
-    color: "#C4A882",
+    color: C.textTertiary,
     fontFamily: Fonts.bodySemiBold,
     letterSpacing: 0.8,
   },
   scroll: { flex: 1 },
   promptWrapper: {
-    backgroundColor: "#181614",
+    backgroundColor: C.backgroundDark,
     marginHorizontal: 16,
     marginTop: 14,
     borderRadius: 26,

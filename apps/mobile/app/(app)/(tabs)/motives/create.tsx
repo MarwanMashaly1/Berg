@@ -264,7 +264,8 @@ function Step2({
       setSearching(true);
       try {
         const data = await apiFetch<{ users: Person[] }>(`/api/users/search?q=${encodeURIComponent(q)}`);
-        setResults(data.users ?? []);
+        const friendIds = new Set(friends.map(f => f.id));
+        setResults((data.users ?? []).filter(u => friendIds.has(u.id)));
       } catch {
         setResults([]);
       } finally {
@@ -493,13 +494,15 @@ function DatePickerModal({
     onClose();
   }
 
-  // Build calendar grid
+  // Build calendar grid as rows of 7
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDayOfMonth(calYear, calMonth);
   const calCells: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) calCells.push(null);
   for (let d = 1; d <= daysInMonth; d++) calCells.push(d);
   while (calCells.length % 7 !== 0) calCells.push(null);
+  const calRows: (number | null)[][] = [];
+  for (let i = 0; i < calCells.length; i += 7) calRows.push(calCells.slice(i, i + 7));
 
   const isSelected = (day: number) =>
     selectedDate.getDate() === day &&
@@ -518,6 +521,7 @@ function DatePickerModal({
       <Pressable style={styles.modalOverlay} onPress={onClose}>
         <Pressable style={styles.modalSheet} onPress={() => {}}>
           <View style={styles.modalHandle} />
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
 
           <Text style={styles.modalTitle}>When?</Text>
 
@@ -559,29 +563,33 @@ function DatePickerModal({
             ))}
           </View>
 
-          {/* Calendar cells */}
+          {/* Calendar cells — explicit rows ensure perfect column alignment */}
           <View style={styles.calGrid}>
-            {calCells.map((day, i) => {
-              if (!day) return <View key={i} style={styles.calDayEmpty} />;
-              const sel = isSelected(day);
-              const past = isPast(day);
-              return (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => !past && selectDay(day)}
-                  style={[styles.calDay, sel && styles.calDaySelected]}
-                  activeOpacity={past ? 1 : 0.7}
-                >
-                  <Text style={[
-                    styles.calDayText,
-                    sel && styles.calDayTextSelected,
-                    past && styles.calDayTextPast,
-                  ]}>
-                    {day}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            {calRows.map((row, ri) => (
+              <View key={ri} style={styles.calRow}>
+                {row.map((day, ci) => {
+                  if (!day) return <View key={ci} style={styles.calDayEmpty} />;
+                  const sel = isSelected(day);
+                  const past = isPast(day);
+                  return (
+                    <TouchableOpacity
+                      key={ci}
+                      onPress={() => !past && selectDay(day)}
+                      style={[styles.calDay, sel && styles.calDaySelected]}
+                      activeOpacity={past ? 1 : 0.7}
+                    >
+                      <Text style={[
+                        styles.calDayText,
+                        sel && styles.calDayTextSelected,
+                        past && styles.calDayTextPast,
+                      ]}>
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
           </View>
 
           {/* Time selector */}
@@ -619,6 +627,7 @@ function DatePickerModal({
               Confirm · {selectedDate.getDate()} {MONTHS[selectedDate.getMonth()]}
             </Text>
           </TouchableOpacity>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -992,16 +1001,16 @@ const ppStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(45,106,79,0.05)',
+    backgroundColor: C.surface,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: 'rgba(45,106,79,0.4)',
+    borderColor: '#2D6A4F',
     padding: 13,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowColor: '#2D6A4F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   selectedInfo: { flex: 1 },
   selectedName: {
@@ -1252,24 +1261,18 @@ function Step4({
       {/* Actions */}
       <TouchableOpacity
         onPress={onSubmit}
-        style={[styles.reviewPrimary, { marginTop: error ? 12 : 24 }]}
+        style={[styles.reviewPrimary, { marginTop: error ? 12 : 24 }, submitting && { opacity: 0.7 }]}
         activeOpacity={0.85}
         disabled={submitting}
       >
-        <Text style={styles.reviewPrimaryText}>
-          {submitting ? 'Saving…' : 'Send invites'}
-        </Text>
+        {submitting
+          ? <ActivityIndicator color="#fff" size="small" />
+          : <Text style={styles.reviewPrimaryText}>Send invites</Text>
+        }
       </TouchableOpacity>
       <TouchableOpacity onPress={onDraft} style={styles.reviewDraft} disabled={submitting}>
         <Text style={styles.reviewDraftText}>Save as draft</Text>
       </TouchableOpacity>
-
-      {/* Loading overlay */}
-      {submitting && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator color={C.primary} size="large" />
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -1862,13 +1865,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.textTertiary,
   },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-  },
   // Date picker modal
   modalOverlay: {
     flex: 1,
@@ -1943,7 +1939,7 @@ const styles = StyleSheet.create({
   },
   calWeekRow: {
     flexDirection: 'row',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   calWeekDay: {
     flex: 1,
@@ -1951,21 +1947,23 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_600SemiBold',
     fontSize: 11,
     color: C.textTertiary,
+    paddingVertical: 6,
   },
   calGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     marginBottom: 16,
   },
+  calRow: {
+    flexDirection: 'row',
+  },
   calDay: {
-    width: `${100 / 7}%`,
+    flex: 1,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 100,
   },
   calDayEmpty: {
-    width: `${100 / 7}%`,
+    flex: 1,
     aspectRatio: 1,
   },
   calDaySelected: {

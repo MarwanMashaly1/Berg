@@ -4,6 +4,7 @@ import {
   Modal, Share, RefreshControl, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import QRCode from 'react-native-qrcode-svg';
@@ -31,6 +32,7 @@ export default function ProfileScreen() {
 
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [connections, setConnections] = useState<ProfileConnection[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [circles, setCircles] = useState<ProfileCircle[]>([]);
   const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,14 +53,22 @@ export default function ProfileScreen() {
       getProfileStats(), getProfileConnections(), getProfileCircles(), getInviteLink(),
     ]);
     if (s.status === 'fulfilled') setStats(s.value);
-    if (c.status === 'fulfilled') setConnections(c.value.confirmed.slice(0, 4));
+    if (c.status === 'fulfilled') {
+      setConnections(c.value.confirmed.slice(0, 4));
+      setPendingCount(c.value.pending.length);
+    }
     if (ci.status === 'fulfilled') setCircles(ci.value.joined.slice(0, 3));
     if (il.status === 'fulfilled') setInviteLink(il.value);
     setLoading(false);
   }, []);
 
-  // Wait for session before loading — avoids 401 on first render before cookie is readable
+  // Initial load — wait for session to avoid 401
   useEffect(() => { if (session) loadAll(); }, [session, loadAll]);
+
+  // Reload when tab comes into focus (catches circle joins, connection accepts, etc.)
+  useFocusEffect(useCallback(() => {
+    if (session) loadAll();
+  }, [session, loadAll]));
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -178,7 +188,14 @@ export default function ProfileScreen() {
           ) : (
             <>
               <TouchableOpacity style={styles.statCell} onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}>
-                <Text style={styles.statNum}>{stats?.connections ?? '0'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.statNum}>{stats?.connections ?? '0'}</Text>
+                  {pendingCount > 0 && (
+                    <View style={styles.pendingBadge}>
+                      <Text style={styles.pendingBadgeText}>{pendingCount}</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.statLabel}>Connections</Text>
               </TouchableOpacity>
               <View style={styles.statDivider} />
@@ -199,8 +216,20 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Connections</Text>
-            <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}>
-              <Text style={styles.sectionLink}>Manage →</Text>
+            <TouchableOpacity
+              style={pendingCount > 0 ? styles.pendingNudge : undefined}
+              onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}
+            >
+              {pendingCount > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <View style={styles.pendingDot} />
+                  <Text style={styles.pendingNudgeText}>
+                    {pendingCount} pending →
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.sectionLink}>Manage →</Text>
+              )}
             </TouchableOpacity>
           </View>
           {loading ? (
@@ -263,9 +292,9 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.circlesPills}>
               {circles.map(ci => (
-                <View key={ci.id} style={[styles.circlePill, { backgroundColor: ci.categoryColor + '28', borderColor: ci.categoryColor + 'BB' }]}>
+                <View key={ci.id} style={[styles.circlePill, { backgroundColor: C.surface, borderColor: ci.categoryColor }]}>
                   <Text style={styles.circlePillEmoji}>{ci.categoryEmoji}</Text>
-                  <Text style={[styles.circlePillName, { color: ci.categoryColor }]}>{ci.name}</Text>
+                  <Text style={styles.circlePillName}>{ci.name}</Text>
                 </View>
               ))}
             </View>
@@ -300,7 +329,7 @@ export default function ProfileScreen() {
       >
         <View style={styles.qrModal}>
           {/* Header */}
-          <View style={styles.qrModalHeader}>
+          <View style={[styles.qrModalHeader, { paddingTop: Math.max(insets.top + 8, 20) }]}>
             <TouchableOpacity
               style={styles.qrModalBack}
               onPress={() => { setShowQR(false); setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; setQrTab('my'); }}
@@ -534,7 +563,7 @@ const styles = StyleSheet.create({
   },
   avatarBlock: { alignItems: 'center', gap: 8 },
   avatar: {
-    shadowColor: '#FF6B35',
+    shadowColor: C.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -636,6 +665,42 @@ const styles = StyleSheet.create({
     color: C.primary,
   },
 
+  // ── Pending request badge / nudge ──
+  pendingBadge: {
+    backgroundColor: C.primary,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  pendingBadgeText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 11,
+    color: '#fff',
+    lineHeight: 14,
+  },
+  pendingNudge: {
+    backgroundColor: 'rgba(255,107,53,0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,53,0.25)',
+  },
+  pendingNudgeText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 12,
+    color: C.primary,
+  },
+  pendingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: C.primary,
+  },
+
   // ── Connection avatar strip ──
   avatarStrip: { flexDirection: 'row', alignItems: 'flex-end' },
   connAvatar: { alignItems: 'center', width: 56 },
@@ -667,12 +732,18 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   circlePillEmoji: { fontSize: 15 },
   circlePillName: {
     fontFamily: Fonts.bodyBold,
     fontSize: 13,
+    color: C.text,
   },
 
   // ── Settings block ──
@@ -706,7 +777,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 56,
     paddingBottom: 12,
   },
   qrModalBack: {},
@@ -739,7 +809,7 @@ const styles = StyleSheet.create({
   qrName: {
     fontFamily: Fonts.heading,
     fontSize: 26,
-    color: '#fff',
+    color: C.textInverse,
     marginBottom: 4,
     letterSpacing: -0.5,
     fontStyle: 'italic',
@@ -771,7 +841,7 @@ const styles = StyleSheet.create({
   },
   qrShareBtn: {
     backgroundColor: C.primary,
-    borderRadius: 16,
+    borderRadius: 14,
     paddingVertical: 15,
     paddingHorizontal: 36,
     shadowColor: C.primary,
@@ -783,7 +853,7 @@ const styles = StyleSheet.create({
   qrShareText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 15,
-    color: '#fff',
+    color: C.textInverse,
     letterSpacing: 0.2,
     textAlign: 'center',
   },
@@ -808,7 +878,7 @@ const styles = StyleSheet.create({
   scanHint: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: '#fff',
+    color: C.textInverse,
     marginTop: 20,
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.8)',
@@ -824,7 +894,7 @@ const styles = StyleSheet.create({
   scanConfirmName: {
     fontFamily: Fonts.heading,
     fontSize: 24,
-    color: '#fff',
+    color: C.textInverse,
     fontStyle: 'italic',
     marginBottom: 8,
     letterSpacing: -0.4,
@@ -851,6 +921,6 @@ const styles = StyleSheet.create({
   scanResultIconText: {
     fontFamily: Fonts.heading,
     fontSize: 32,
-    color: '#fff',
+    color: C.textInverse,
   },
 });

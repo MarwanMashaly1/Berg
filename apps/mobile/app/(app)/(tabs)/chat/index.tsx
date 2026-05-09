@@ -291,5 +291,5 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
   badgeText: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: C.textInverse },
-  sep: { height: 1, backgroundColor: 'rgba(0,0,0,0.05)', marginLeft: 84 },
+  sep: { height: 1, backgroundColor: C.borderWarm, marginLeft: 84 },
 });

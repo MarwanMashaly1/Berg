@@ -50,7 +50,7 @@ export default function Step5() {
       <View style={{ gap: 12 }}>
         <Button label="Share & continue" onPress={async () => { await handleShare(); advance(); }} loading={saving} disabled={!shareLink} fullWidth size="lg" style={styles.btn} textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }} />
         <TouchableOpacity onPress={advance} style={{ alignItems: 'center', paddingVertical: 8 }}>
-          <Text style={{ fontFamily: Fonts.body, fontSize: 14, color: '#b0a090' }}>Skip for now</Text>
+          <Text style={{ fontFamily: Fonts.body, fontSize: 14, color: C.textTertiary }}>Skip for now</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -60,12 +60,12 @@ export default function Step5() {
 const styles = StyleSheet.create({
   header: { marginBottom: 32 },
   content: { flex: 1, justifyContent: 'center', paddingBottom: 32 },
-  heading: { fontFamily: Fonts.heading, fontSize: 34, color: C.text, lineHeight: 40, letterSpacing: -0.5, marginBottom: 14 },
+  heading: { fontFamily: Fonts.heading, fontSize: 34, fontStyle: 'italic', color: C.text, lineHeight: 40, letterSpacing: -0.5, marginBottom: 14 },
   rule: { width: 32, height: 2, backgroundColor: C.primary, borderRadius: 2, marginBottom: 14 },
-  sub: { fontFamily: Fonts.body, fontSize: 15, color: '#9a8a7a', lineHeight: 22, marginBottom: 28 },
-  shareCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', borderRadius: 16, padding: 18, borderWidth: 1.5, borderColor: C.border },
+  sub: { fontFamily: Fonts.body, fontSize: 15, color: C.textSecondary, lineHeight: 22, marginBottom: 28 },
+  shareCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: C.surface, borderRadius: 16, padding: 18, borderWidth: 1.5, borderColor: C.border },
   shareEmoji: { fontSize: 28 },
   shareTitle: { fontFamily: Fonts.bodySemiBold, fontSize: 15, color: C.text, marginBottom: 2 },
-  shareUrl: { fontFamily: Fonts.body, fontSize: 12, color: '#b0a090' },
+  shareUrl: { fontFamily: Fonts.body, fontSize: 12, color: C.textTertiary },
   btn: { backgroundColor: C.text, borderRadius: 14 },
 });

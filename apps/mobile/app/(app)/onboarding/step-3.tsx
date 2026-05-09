@@ -61,7 +61,7 @@ export default function Step3() {
         <View style={{ gap: 12 }}>
           <Button label="Next" onPress={() => advance(false)} loading={saving} fullWidth size="lg" style={styles.btn} textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }} />
           <TouchableOpacity onPress={() => advance(true)} style={{ alignItems: 'center', paddingVertical: 8 }}>
-            <Text style={{ fontFamily: Fonts.body, fontSize: 14, color: '#b0a090' }}>Skip for now</Text>
+            <Text style={{ fontFamily: Fonts.body, fontSize: 14, color: C.textTertiary }}>Skip for now</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -72,8 +72,8 @@ export default function Step3() {
 const styles = StyleSheet.create({
   header: { marginBottom: 32 },
   content: { flex: 1, paddingBottom: 32 },
-  heading: { fontFamily: Fonts.heading, fontSize: 34, color: C.text, lineHeight: 40, letterSpacing: -0.5, marginBottom: 14 },
+  heading: { fontFamily: Fonts.heading, fontSize: 34, fontStyle: 'italic', color: C.text, lineHeight: 40, letterSpacing: -0.5, marginBottom: 14 },
   rule: { width: 32, height: 2, backgroundColor: C.primary, borderRadius: 2, marginBottom: 14 },
-  sub: { fontFamily: Fonts.body, fontSize: 15, color: '#9a8a7a', lineHeight: 22 },
+  sub: { fontFamily: Fonts.body, fontSize: 15, color: C.textSecondary, lineHeight: 22 },
   btn: { backgroundColor: C.text, borderRadius: 14 },
 });

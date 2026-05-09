@@ -47,8 +47,8 @@ export default function Step6() {
 const styles = StyleSheet.create({
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 40 },
   emoji: { fontSize: 56, marginBottom: 24 },
-  heading: { fontFamily: Fonts.heading, fontSize: 44, color: C.text, textAlign: 'center', marginBottom: 16, letterSpacing: -1 },
+  heading: { fontFamily: Fonts.heading, fontSize: 44, fontStyle: 'italic', color: C.text, textAlign: 'center', marginBottom: 16, letterSpacing: -1 },
   rule: { width: 40, height: 3, backgroundColor: C.primary, borderRadius: 2, marginBottom: 20 },
-  sub: { fontFamily: Fonts.body, fontSize: 16, color: '#9a8a7a', lineHeight: 26, textAlign: 'center', maxWidth: 280 },
-  btn: { backgroundColor: C.text, borderRadius: 16 },
+  sub: { fontFamily: Fonts.body, fontSize: 16, color: C.textSecondary, lineHeight: 26, textAlign: 'center', maxWidth: 280 },
+  btn: { backgroundColor: C.text, borderRadius: 14 },
 });

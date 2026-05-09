@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Modal,
-  ScrollView, Alert, Image as RNImage, RefreshControl,
+  ScrollView, Alert, Image as RNImage, RefreshControl, useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
@@ -299,6 +299,9 @@ const rm = StyleSheet.create({
 // ── Message bubble ────────────────────────────────────────────────────────────
 
 function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
+  const { width: screenWidth } = useWindowDimensions();
+  const mediaWidth = Math.min(220, screenWidth * 0.58);
+  const mediaHeight = Math.round(mediaWidth * (180 / 220));
   const isImage = msg.type === 'image';
   const isGif = msg.type === 'gif';
   const isMedia = isImage || isGif;
@@ -319,7 +322,7 @@ function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
               <View style={[styles.mediaBubble, styles.mediaBubbleThem]}>
                 <Image
                   source={{ uri: msg.content }}
-                  style={styles.mediaImg}
+                  style={{ width: mediaWidth, height: mediaHeight }}
                   contentFit="cover"
                   transition={200}
                 />
@@ -343,7 +346,7 @@ function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
             <View style={[styles.mediaBubble, styles.mediaBubbleMe]}>
               <Image
                 source={{ uri: msg.content }}
-                style={styles.mediaImg}
+                style={{ width: mediaWidth, height: mediaHeight }}
                 contentFit="cover"
                 transition={200}
               />
@@ -479,15 +482,23 @@ export default function ChatRoomScreen() {
       config: { presence: { key: myId } },
     });
 
+    // Broadcast listener — primary live-update path (no DB replication config needed)
+    channel.on('broadcast', { event: 'new_message' }, ({ payload }) => {
+      const msg = payload as ChatMessage;
+      setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
+    });
+
+    // postgres_changes — fallback if Supabase realtime publication includes messages table
     channel.on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
-      (payload) => {
+      (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as {
           id: string; chat_id: string; sender_id: string;
           content: string; type: string; metadata: unknown; created_at: string;
         };
-        const presenceState = channel.presenceState<{ userId: string; name: string }>() as unknown as PresenceState;
+        const presenceState = channel.presenceState() as unknown as PresenceState;
         const senderEntry = Object.values(presenceState).flat().find(p => p.userId === row.sender_id);
         const newMsg: ChatMessage = {
           id: row.id, chatId: row.chat_id, senderId: row.sender_id,
@@ -502,14 +513,14 @@ export default function ChatRoomScreen() {
     );
 
     channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState<{ userId: string; name: string; typing: boolean }>() as PresenceState;
+      const state = channel.presenceState() as unknown as PresenceState;
       const typers = Object.values(state).flat()
         .filter(p => p.userId !== myId && p.typing)
         .map(p => p.name?.split(' ')[0] ?? 'Someone');
       setTypingNames(typers);
     });
 
-    channel.subscribe(async status => {
+    channel.subscribe(async (status: string) => {
       if (status === 'SUBSCRIBED') {
         await channel.track({ userId: myId, name: myName, typing: false });
       }
@@ -543,9 +554,13 @@ export default function ChatRoomScreen() {
         : [...prev, { localId: id, content, status: 'sending', createdAt: new Date().toISOString() }],
     );
     try {
-      await sendMessage(chatId, content);
-      // Real message will arrive via realtime; remove optimistic placeholder
+      const { message } = await sendMessage(chatId, content);
+      // Add real message immediately — don't depend on postgres_changes firing
+      setMessages(prev => prev.some(m => m.id === message.id) ? prev : [...prev, message]);
       setOptimistic(prev => prev.filter(m => m.localId !== id));
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
+      // Broadcast to other members so they get live updates without postgres_changes config
+      channelRef.current?.send({ type: 'broadcast', event: 'new_message', payload: message });
     } catch {
       setOptimistic(prev => prev.map(m => m.localId === id ? { ...m, status: 'failed' } : m));
     }
@@ -671,7 +686,7 @@ export default function ChatRoomScreen() {
         {/* Messages */}
         {loading ? (
           <View style={styles.center}><ActivityIndicator color={C.primary} /></View>
-        ) : messages.length === 0 ? (
+        ) : listItems.length === 0 ? (
           <View style={styles.emptyChat}>
             <Text style={styles.emptyChatTitle}>Start the conversation</Text>
             <Text style={styles.emptyChatGreeting}>Say hi!</Text>
@@ -803,7 +818,7 @@ export default function ChatRoomScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0E8DC' },
+  container: { flex: 1, backgroundColor: C.background },
   header: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.surface, gap: 8,
@@ -834,7 +849,6 @@ const styles = StyleSheet.create({
   mediaBubble: { borderRadius: 12, overflow: 'hidden' },
   mediaBubbleMe: { borderBottomRightRadius: 4 },
   mediaBubbleThem: { borderBottomLeftRadius: 4 },
-  mediaImg: { width: 220, height: 180 },
   timeLabel: { fontFamily: Fonts.body, fontSize: 11, color: C.textTertiary, marginTop: 2 },
   timeLabelMe: { textAlign: 'right', marginRight: 4 },
   timeLabelThem: { marginLeft: 4 },

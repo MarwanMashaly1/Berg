@@ -21,7 +21,8 @@ import { apiFetch, confirmMotive, getMyMemory, type MyMemory } from '../../../..
 const C = Colors.light;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type RsvpStatus = 'invited' | 'joined' | 'going' | 'passed';
+// Backend sends: 'invited' | 'going' | 'maybe' | 'declined'
+type RsvpStatus = 'invited' | 'going' | 'maybe' | 'declined';
 type Attendee = {
   userId: string;
   name: string | null;
@@ -34,7 +35,7 @@ type ActivityItem = {
   actorName: string | null;
   createdAt: string;
 };
-type MotiveStatus = 'planning' | 'confirmed' | 'open' | 'locked' | 'completed' | 'cancelled' | 'unconfirmed';
+type MotiveStatus = 'planning' | 'confirmed' | 'past' | 'open' | 'locked' | 'completed' | 'cancelled' | 'unconfirmed';
 type MotiveDetail = {
   id: string;
   title: string;
@@ -95,10 +96,10 @@ function activityText(item: ActivityItem): string {
 
 // ─── Attendee row (list style) ────────────────────────────────────────────────
 const STATUS_CONFIG: Record<RsvpStatus, { label: string; icon: string; color: string; bg: string }> = {
-  joined:  { label: 'Going',           icon: '✓', color: '#4CAF81', bg: 'rgba(76,175,129,0.12)' },
-  going:   { label: 'Maybe',           icon: '~', color: '#F5A623', bg: 'rgba(245,166,35,0.12)' },
-  passed:  { label: "Can't make it",   icon: '✕', color: C.error,   bg: 'rgba(230,57,70,0.10)' },
-  invited: { label: 'Awaiting',        icon: '…', color: C.textTertiary, bg: 'rgba(150,150,150,0.10)' },
+  going:    { label: 'Going',         icon: '✓', color: '#4CAF81',       bg: 'rgba(76,175,129,0.12)' },
+  maybe:    { label: 'Maybe',         icon: '~', color: '#F5A623',       bg: 'rgba(245,166,35,0.12)' },
+  declined: { label: "Can't make it", icon: '✕', color: C.error,         bg: 'rgba(230,57,70,0.10)' },
+  invited:  { label: 'Awaiting',      icon: '…', color: C.textTertiary,  bg: 'rgba(150,150,150,0.10)' },
 };
 
 function AttendeeRow({ attendee, isMe }: { attendee: Attendee; isMe: boolean }) {
@@ -123,10 +124,10 @@ function AttendeeRow({ attendee, isMe }: { attendee: Attendee; isMe: boolean }) 
 
 // ─── Grouped attendees section ────────────────────────────────────────────────
 function AttendeesSection({ attendees, myId }: { attendees: Attendee[]; myId: string }) {
-  const going   = attendees.filter(a => a.rsvpStatus === 'joined');
-  const maybe   = attendees.filter(a => a.rsvpStatus === 'going');
-  const pending = attendees.filter(a => a.rsvpStatus === 'invited');
-  const declined = attendees.filter(a => a.rsvpStatus === 'passed');
+  const going    = attendees.filter(a => a.rsvpStatus === 'going');
+  const maybe    = attendees.filter(a => a.rsvpStatus === 'maybe');
+  const pending  = attendees.filter(a => a.rsvpStatus === 'invited');
+  const declined = attendees.filter(a => a.rsvpStatus === 'declined');
 
   const groups = [
     { key: 'going',    label: 'Going',          color: '#4CAF81', list: going },
@@ -235,21 +236,33 @@ export default function MotiveDetailScreen() {
   const handleRsvp = async (status: RsvpStatus) => {
     if (rsvpLoading || !id) return;
     const prev = myRsvp;
+    setRsvpLoading(true);
     setMyRsvp(status);
-    const apiStatusMap: Record<RsvpStatus, string> = {
-      joined: 'going',
-      going: 'maybe',
-      invited: 'maybe',
-      passed: 'declined',
-    };
+    // Patch attendee in motive state immediately so the attendee list reflects change
+    if (session?.user?.id) {
+      setMotive(prev => prev ? {
+        ...prev,
+        attendees: prev.attendees.map(a =>
+          a.userId === session.user.id ? { ...a, rsvpStatus: status } : a
+        ),
+      } : prev);
+    }
     try {
-      setRsvpLoading(true);
       await apiFetch(`/api/motives/${id}/rsvp`, {
         method: 'POST',
-        body: JSON.stringify({ status: apiStatusMap[status] }),
+        body: JSON.stringify({ status }),
       });
     } catch {
       setMyRsvp(prev);
+      // Revert attendee state on failure
+      if (session?.user?.id && prev) {
+        setMotive(m => m ? {
+          ...m,
+          attendees: m.attendees.map(a =>
+            a.userId === session.user.id ? { ...a, rsvpStatus: prev } : a
+          ),
+        } : m);
+      }
     } finally {
       setRsvpLoading(false);
     }
@@ -353,31 +366,35 @@ export default function MotiveDetailScreen() {
             ) : (
               <>
                 <TouchableOpacity
-                  onPress={() => handleRsvp('joined')}
+                  onPress={() => handleRsvp('going')}
+                  disabled={rsvpLoading}
                   style={[
                     styles.goingBtn,
-                    myRsvp === 'joined' && styles.goingBtnActive,
+                    myRsvp === 'going' && styles.goingBtnActive,
+                    rsvpLoading && { opacity: 0.6 },
                   ]}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.goingBtnText, myRsvp === 'joined' && styles.goingBtnTextActive]}>
-                    {myRsvp === 'joined' ? 'Going' : "I'm going"}
+                  <Text style={[styles.goingBtnText, myRsvp === 'going' && styles.goingBtnTextActive]}>
+                    {myRsvp === 'going' ? 'Going ✓' : "I'm going"}
                   </Text>
                 </TouchableOpacity>
                 <View style={styles.maybeRow}>
                   <TouchableOpacity
-                    onPress={() => handleRsvp('invited')}
-                    style={[styles.maybeBtn, myRsvp === 'invited' && styles.maybeBtnActive]}
+                    onPress={() => handleRsvp('maybe')}
+                    disabled={rsvpLoading}
+                    style={[styles.maybeBtn, myRsvp === 'maybe' && styles.maybeBtnActive]}
                   >
-                    <Text style={[styles.maybeBtnText, myRsvp === 'invited' && styles.maybeBtnTextActive]}>
+                    <Text style={[styles.maybeBtnText, myRsvp === 'maybe' && styles.maybeBtnTextActive]}>
                       Maybe
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={() => handleRsvp('passed')}
-                    style={[styles.maybeBtn, myRsvp === 'passed' && styles.maybeBtnActive]}
+                    onPress={() => handleRsvp('declined')}
+                    disabled={rsvpLoading}
+                    style={[styles.maybeBtn, myRsvp === 'declined' && styles.maybeBtnActive]}
                   >
-                    <Text style={[styles.maybeBtnText, myRsvp === 'passed' && styles.maybeBtnTextActive]}>
+                    <Text style={[styles.maybeBtnText, myRsvp === 'declined' && styles.maybeBtnTextActive]}>
                       Can&apos;t make it
                     </Text>
                   </TouchableOpacity>

@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
-  Dimensions,
   Pressable,
   TextInput,
   RefreshControl,
@@ -442,7 +441,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   headerDate: {
-    fontFamily: 'DMSans_400Regular',
+    fontFamily: Fonts.body,
     fontSize: 12,
     color: C.textTertiary,
     marginTop: 2,

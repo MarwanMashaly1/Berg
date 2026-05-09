@@ -110,19 +110,19 @@ export default function Step2() {
 }
 
 const styles = StyleSheet.create({
-  heading: { fontFamily: Fonts.heading, fontSize: 32, color: C.text, lineHeight: 38, letterSpacing: -0.5, marginBottom: 12 },
+  heading: { fontFamily: Fonts.heading, fontSize: 32, fontStyle: 'italic', color: C.text, lineHeight: 38, letterSpacing: -0.5, marginBottom: 12 },
   rule: { width: 32, height: 2, backgroundColor: C.primary, borderRadius: 2, marginBottom: 12 },
-  sub: { fontFamily: Fonts.body, fontSize: 14, color: '#9a8a7a' },
+  sub: { fontFamily: Fonts.body, fontSize: 14, color: C.textSecondary },
   scroll: { paddingHorizontal: 28, paddingTop: 8 },
   section: { marginBottom: 20 },
-  catLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: '#c0b0a0', letterSpacing: 0.8, marginBottom: 10 },
+  catLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: C.textTertiary, letterSpacing: 0.8, marginBottom: 10 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: C.border, backgroundColor: '#fff' },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.surface },
   tagActive: { backgroundColor: C.primary, borderColor: C.primary },
   tagEmoji: { fontSize: 14 },
   tagLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 13, color: C.text },
-  tagLabelActive: { color: '#fff' },
+  tagLabelActive: { color: C.textInverse },
   bottomBar: { paddingHorizontal: 28, paddingTop: 12, backgroundColor: C.backgroundWarm, gap: 8 },
-  count: { fontFamily: Fonts.body, fontSize: 12, color: '#b0a090', textAlign: 'center' },
+  count: { fontFamily: Fonts.body, fontSize: 12, color: C.textTertiary, textAlign: 'center' },
   btn: { backgroundColor: C.text, borderRadius: 14 },
 });

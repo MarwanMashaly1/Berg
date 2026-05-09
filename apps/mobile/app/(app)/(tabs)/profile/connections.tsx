@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, Share, RefreshControl, Alert,
 } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../../../constants/theme';
@@ -97,7 +98,7 @@ export default function ConnectionsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <View style={styles.chevron} />
+          <MaterialIcons name="arrow-back-ios" size={16} color={C.textSecondary} />
         </TouchableOpacity>
         <Text style={styles.title}>Connections</Text>
         <TouchableOpacity onPress={() => router.push('/(app)/find-friends' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -112,10 +113,7 @@ export default function ConnectionsScreen() {
       >
         {/* Search bar */}
         <View style={styles.searchWrap}>
-          <View style={styles.searchIcon}>
-            <View style={styles.searchCircle} />
-            <View style={styles.searchHandle} />
-          </View>
+          <MaterialIcons name="search" size={18} color={C.textTertiary} />
           <TextInput
             style={styles.searchInput}
             value={query}
@@ -138,10 +136,7 @@ export default function ConnectionsScreen() {
             onPress={() => Share.share({ message: `Join me on Berg!\n${inviteLink.url}` })}
             activeOpacity={0.85}
           >
-            <View style={styles.inviteIcon}>
-              <View style={styles.inviteLink1} />
-              <View style={styles.inviteLink2} />
-            </View>
+            <MaterialIcons name="link" size={20} color={C.textInverse} />
             <View style={{ flex: 1 }}>
               <Text style={styles.inviteTitle}>Invite friends</Text>
               <Text style={styles.inviteSub}>Share your link · {inviteLink.code}</Text>
@@ -196,10 +191,8 @@ export default function ConnectionsScreen() {
 
           {filteredConfirmed.length === 0 ? (
             <View style={styles.emptyState}>
-              {/* Geometric people icon */}
               <View style={styles.emptyIconWrap}>
-                <View style={styles.emptyHead} />
-                <View style={styles.emptyBody} />
+                <MaterialIcons name="people-outline" size={28} color={C.textTertiary} />
               </View>
               <Text style={styles.emptyTitle}>
                 {query.trim() ? 'No results' : 'No connections yet'}
@@ -234,8 +227,7 @@ export default function ConnectionsScreen() {
                       <Text style={styles.rowMeta}>{avail.label}</Text>
                     )}
                   </View>
-                  {/* Chevron drawn with views */}
-                  <View style={styles.rowChevron} />
+                  <MaterialIcons name="chevron-right" size={20} color={C.textTertiary} />
                 </TouchableOpacity>
               );
             })
@@ -304,16 +296,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Left-pointing chevron drawn with a rotated view
-  chevron: {
-    width: 8,
-    height: 8,
-    borderLeftWidth: 2,
-    borderBottomWidth: 2,
-    borderColor: C.textSecondary,
-    transform: [{ rotate: '45deg' }],
-    marginLeft: 3,
-  },
   title: {
     fontFamily: Fonts.heading,
     fontSize: 22,
@@ -342,28 +324,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  // Magnifying glass drawn with views
-  searchIcon: { width: 15, height: 15, position: 'relative', flexShrink: 0 },
-  searchCircle: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: C.textTertiary,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-  },
-  searchHandle: {
-    width: 5,
-    height: 2,
-    backgroundColor: C.textTertiary,
-    borderRadius: 1,
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    transform: [{ rotate: '-45deg' }],
-  },
   searchInput: {
     flex: 1,
     fontFamily: Fonts.body,
@@ -388,23 +348,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     backgroundColor: C.primary,
-  },
-  // Two linked circles drawn with views
-  inviteIcon: { width: 22, height: 14, flexShrink: 0, flexDirection: 'row', gap: -4 },
-  inviteLink1: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-  },
-  inviteLink2: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    marginLeft: -6,
   },
   inviteTitle: { fontFamily: Fonts.bodySemiBold, fontSize: 13, color: C.textInverse },
   inviteSub: { fontFamily: Fonts.body, fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 1 },
@@ -459,7 +402,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#F4A261',
+    borderColor: C.warning,
     padding: 13,
   },
   acceptBtn: {
@@ -493,7 +436,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
     padding: 13,
-    shadowColor: '#8B6A4A',
+    shadowColor: C.cardShadowColor,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -510,17 +453,6 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 3.5,
   },
-  // Right-pointing chevron for confirmed rows
-  rowChevron: {
-    width: 7,
-    height: 7,
-    borderRightWidth: 2,
-    borderTopWidth: 2,
-    borderColor: C.border,
-    transform: [{ rotate: '45deg' }],
-    flexShrink: 0,
-  },
-
   // ── Sent / awaiting ──
   sentCard: {
     flexDirection: 'row',
@@ -580,23 +512,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
-  },
-  emptyHead: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2.5,
-    borderColor: C.textTertiary,
-    marginBottom: 2,
-  },
-  emptyBody: {
-    width: 20,
-    height: 10,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    borderWidth: 2.5,
-    borderBottomWidth: 0,
-    borderColor: C.textTertiary,
   },
   emptyTitle: {
     fontFamily: Fonts.bodySemiBold,
