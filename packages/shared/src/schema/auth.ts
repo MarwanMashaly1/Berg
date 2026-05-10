@@ -29,6 +29,7 @@ export const users = pgTable('users', {
   notifyMotiveInvites: boolean('notify_motive_invites').notNull().default(false),
   showInDiscovery: boolean('show_in_discovery').notNull().default(true),
   expoPushToken: text('expo_push_token'),  // set after permission granted on device
+  deletedAt: timestamp('deleted_at'),      // soft-delete: set on account deletion
 });
 
 // BetterAuth core table: sessions

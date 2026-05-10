@@ -139,7 +139,7 @@ profileRoutes.get('/circles', async (c) => {
       .slice(0, 3)
       .map((id) => userPreviewById.get(id))
       .filter((u): u is NonNullable<typeof u> => !!u);
-    return { id: gc.id, name: gc.name, categoryEmoji: gc.categoryEmoji, categoryColor: gc.categoryColor, memberCount: memberIds.length, friendsInsideCount, memberPreviews };
+    return { id: gc.id, name: gc.name, categoryEmoji: gc.categoryEmoji, categoryColor: gc.categoryColor, coverImage: gc.coverImage ?? null, memberCount: memberIds.length, friendsInsideCount, memberPreviews };
   });
 
   return c.json({ joined });

@@ -7,9 +7,11 @@ import {
   chatMembers,
   messages,
   users,
+  circles,
+  notificationInbox,
 } from '@berg/shared';
 import { requireAuth } from '../middleware/auth.js';
-import { sendPushBatch } from '../lib/notifications.js';
+import { debouncedChatPush } from '../lib/notifications.js';
 import { supabaseAdmin, CHAT_IMAGES_BUCKET } from '../lib/supabase-admin.js';
 import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
 import type { auth } from '../auth.js';
@@ -161,6 +163,54 @@ chatsRoutes.post('/groups', async (c) => {
   return c.json({ id: chat.id }, 201);
 });
 
+// -- POST /api/chats/direct -- get or create a 1-on-1 DM ----------------------
+// MUST be registered before /:id routes
+chatsRoutes.post('/direct', async (c) => {
+  const me = c.get('user')!;
+  const { userId } = await c.req.json<{ userId: string }>();
+
+  if (!userId || userId === me.id) return c.json({ error: 'invalid userId' }, 400);
+
+  // Verify the two users are connected
+  const [conn] = await db
+    .select({ id: circles.id })
+    .from(circles)
+    .where(
+      sql`(${circles.userId} = ${me.id} AND ${circles.friendId} = ${userId})
+        OR (${circles.userId} = ${userId} AND ${circles.friendId} = ${me.id})`,
+    )
+    .limit(1);
+
+  if (!conn) return c.json({ error: 'not connected' }, 403);
+
+  // Find existing direct chat between these two users
+  const existing = await db.execute(sql`
+    SELECT c.id FROM ${chats} c
+    JOIN ${chatMembers} cm1 ON cm1.chat_id = c.id AND cm1.user_id = ${me.id}
+    JOIN ${chatMembers} cm2 ON cm2.chat_id = c.id AND cm2.user_id = ${userId}
+    WHERE c.type = 'direct'
+    LIMIT 1
+  `);
+
+  if (existing.length > 0) {
+    const row = existing[0] as { id: string };
+    return c.json({ id: row.id, isNew: false });
+  }
+
+  // Create new direct chat
+  const [chat] = await db
+    .insert(chats)
+    .values({ type: 'direct', name: null })
+    .returning({ id: chats.id });
+
+  await db.insert(chatMembers).values([
+    { chatId: chat.id, userId: me.id },
+    { chatId: chat.id, userId },
+  ]);
+
+  return c.json({ id: chat.id, isNew: true }, 201);
+});
+
 // -- GET /api/chats/:id -- chat info + members ---------------------------------
 chatsRoutes.get('/:id', async (c) => {
   const me = c.get('user')!;
@@ -220,11 +270,21 @@ chatsRoutes.get('/:id/messages', async (c) => {
     .orderBy(desc(messages.createdAt))
     .limit(limit);
 
-  // Mark as read
-  await db
-    .update(chatMembers)
-    .set({ lastReadAt: new Date() })
-    .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, me.id)));
+  // Mark chat as read + dismiss inbox notifications for this chat
+  await Promise.all([
+    db.update(chatMembers)
+      .set({ lastReadAt: new Date() })
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, me.id))),
+    db.update(notificationInbox)
+      .set({ readAt: new Date() })
+      .where(
+        and(
+          eq(notificationInbox.userId, me.id),
+          sql`${notificationInbox.data}::jsonb->>'chatId' = ${chatId}`,
+          sql`${notificationInbox.readAt} IS NULL`,
+        ),
+      ),
+  ]);
 
   return c.json({ messages: rows.reverse(), hasMore: rows.length === limit });
 });
@@ -294,7 +354,7 @@ chatsRoutes.post('/:id/messages', async (c) => {
       const chat = chatRow[0];
       const preview = content.length > 60 ? content.slice(0, 57) + '...' : content;
       const isGroup = chat.type === 'group';
-      void sendPushBatch(otherMembers, {
+      void debouncedChatPush(chatId, otherMembers, {
         title: isGroup ? (chat.name ?? 'Group') : (me.name ?? 'Someone'),
         body: isGroup ? `${me.name ?? 'Someone'}: ${preview}` : preview,
         data: { screen: 'chat', chatId },

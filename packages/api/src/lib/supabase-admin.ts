@@ -13,4 +13,5 @@ export const supabaseAdmin = createClient(
 export const MEMORIES_BUCKET = 'motive-memories';
 export const CHAT_IMAGES_BUCKET = 'chat-images';
 export const AVATARS_BUCKET = 'avatars';
+export const CIRCLE_IMAGES_BUCKET = 'circle-images';
 export const SIGNED_URL_TTL = 3600; // 1 hour

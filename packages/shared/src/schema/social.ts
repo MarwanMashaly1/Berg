@@ -23,6 +23,7 @@ export const groupCircles = pgTable('group_circles', {
   isPublic: boolean('is_public').notNull().default(true),
   categoryEmoji: text('category_emoji').notNull().default('👥'),
   categoryColor: text('category_color').notNull().default('#e8f0fe'),
+  coverImage: text('cover_image'),
   maxMembers: integer('max_members'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });

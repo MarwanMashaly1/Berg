@@ -7,7 +7,7 @@ import { db } from '../db.js';
 import {
   users, userVibeTags, vibeTags, inviteLinks, circles,
   groupCircles, memoryPhotos, motives, promptResponses,
-  motiveMemories, messages, chatMembers,
+  motiveMemories, messages, chatMembers, sessions, accounts,
 } from '@berg/shared';
 import { enqueue } from '../lib/queue.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -135,6 +135,16 @@ userRoutes.patch('/me', zValidator('json', patchUserSchema), async (c) => {
     .limit(1);
 
   return c.json({ user: updated ?? null });
+});
+
+// GET /api/users/me/vibe-tags -- fetch current user's selected vibe tag IDs
+userRoutes.get('/me/vibe-tags', async (c) => {
+  const user = c.get('user')!;
+  const rows = await db
+    .select({ id: userVibeTags.tagId })
+    .from(userVibeTags)
+    .where(eq(userVibeTags.userId, user.id));
+  return c.json({ tagIds: rows.map((r) => r.id) });
 });
 
 // POST /api/users/me/vibe-tags -- save selected vibe tags (replaces existing)
@@ -329,42 +339,51 @@ userRoutes.post('/me/push-token', async (c) => {
   return c.json({ ok: true });
 });
 
-// DELETE /api/users/me -- GDPR right to erasure: permanently delete account and all user data
+// DELETE /api/users/me -- soft-delete: anonymises PII, logs out, preserves messages
 userRoutes.delete('/me', async (c) => {
   const me = c.get('user');
   if (!me) return c.json({ error: 'Unauthorized' }, 401);
 
   try {
-    // 1. Remove avatar from Supabase storage
+    // 1. Remove avatar from storage (no longer needed)
     const avatarExts = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
     await supabaseAdmin.storage
       .from(AVATARS_BUCKET)
       .remove(avatarExts.map(ext => `${me.id}/avatar.${ext}`))
       .catch(() => {});
 
-    // 2. Delete memory photos uploaded by this user (no FK cascade on uploadedBy)
-    const userPhotos = await db
-      .select({ photoUrl: memoryPhotos.photoUrl })
-      .from(memoryPhotos)
-      .where(eq(memoryPhotos.uploadedBy, me.id));
-    if (userPhotos.length > 0) {
-      const paths = userPhotos
-        .map(p => p.photoUrl.split('/storage/v1/object/public/')[1])
-        .filter(Boolean);
-      if (paths.length > 0) {
-        const bucket = paths[0].split('/')[0];
-        const filePaths = paths.map(p => p.replace(`${bucket}/`, ''));
-        await supabaseAdmin.storage.from(bucket).remove(filePaths).catch(() => {});
-      }
-      await db.delete(memoryPhotos).where(eq(memoryPhotos.uploadedBy, me.id));
-    }
+    // 2. Anonymise the user row — wipe all PII, mark as deleted
+    //    Messages/chats remain so other users see "Deleted User" attribution
+    await db.update(users).set({
+      name: 'Deleted User',
+      displayName: 'Deleted User',
+      email: `deleted+${me.id}@berg.invalid`,
+      emailVerified: false,
+      image: null,
+      bio: null,
+      username: null,
+      phoneNumber: null,
+      phoneHash: null,
+      phoneVerified: false,
+      expoPushToken: null,
+      showInDiscovery: false,
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(users.id, me.id));
 
-    // 3. Delete group circles this user admins (FK adminUserId has no cascade)
+    // 3. Delete all sessions (forces logout on all devices)
+    await db.delete(sessions).where(eq(sessions.userId, me.id));
+
+    // 4. Delete OAuth accounts (prevents re-login via Google/Apple)
+    await db.delete(accounts).where(eq(accounts.userId, me.id));
+
+    // 5. Remove from all circles / connections
+    await db.delete(circles).where(
+      sql`${circles.userId} = ${me.id} OR ${circles.friendId} = ${me.id}`,
+    );
+
+    // 6. Remove from group circles
     await db.delete(groupCircles).where(eq(groupCircles.adminUserId, me.id));
-
-    // 4. Delete the user row — cascades sessions, accounts, circles, motives,
-    //    attendees, messages, memories, prompt responses, notifications, etc.
-    await db.delete(users).where(eq(users.id, me.id));
 
     return c.json({ ok: true });
   } catch (err) {

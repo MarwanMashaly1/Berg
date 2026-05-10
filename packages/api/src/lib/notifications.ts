@@ -3,6 +3,15 @@ import { users, notificationInbox } from '@berg/shared';
 import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
+// Per-chat debounce: coalesce rapid messages into one push notification
+type PendingPush = {
+  timer: ReturnType<typeof setTimeout>;
+  userIds: string[];
+  payload: PushPayload;
+};
+const pendingPushes = new Map<string, PendingPush>();
+const PUSH_DEBOUNCE_MS = 3_000;
+
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 export type PushPayload = {
@@ -65,6 +74,7 @@ export async function sendPush(userId: string, payload: PushPayload): Promise<vo
 /**
  * Send the same push notification to multiple users AND record in inbox for all.
  * Skips push for users without tokens, but all users get an inbox row.
+ * Pass `tag` in data to collapse multiple notifications from the same chat into one on device.
  */
 export async function sendPushBatch(userIds: string[], payload: PushPayload): Promise<void> {
   if (userIds.length === 0) return;
@@ -75,12 +85,15 @@ export async function sendPushBatch(userIds: string[], payload: PushPayload): Pr
   const tokens = await getTokens(userIds);
   if (tokens.length === 0) return;
 
+  const collapseKey = payload.data?.chatId;
   const messages = tokens.map((t) => ({
     to: t.token,
     sound: 'default',
     title: payload.title,
     body: payload.body,
     data: payload.data ?? {},
+    // collapse multiple notifications from the same chat on device
+    ...(collapseKey ? { channelId: collapseKey, tag: collapseKey } : {}),
   }));
 
   for (let i = 0; i < messages.length; i += 100) {
@@ -90,6 +103,57 @@ export async function sendPushBatch(userIds: string[], payload: PushPayload): Pr
       body: JSON.stringify(messages.slice(i, i + 100)),
     }).catch((e) => console.error('[push] batch send failed:', e));
   }
+}
+
+/**
+ * Debounced push for chat messages: coalesces rapid messages in the same chat
+ * into a single push notification sent 3 seconds after the last message.
+ * Inbox rows are written immediately (per message); only the device push is debounced.
+ */
+export async function debouncedChatPush(
+  chatId: string,
+  userIds: string[],
+  payload: PushPayload,
+): Promise<void> {
+  if (userIds.length === 0) return;
+
+  // Always record inbox row immediately so in-app notification appears right away
+  await recordInbox(userIds, payload);
+
+  const existing = pendingPushes.get(chatId);
+  if (existing) {
+    clearTimeout(existing.timer);
+    // Merge userIds (same chat, may have new members)
+    const merged = Array.from(new Set([...existing.userIds, ...userIds]));
+    existing.userIds = merged;
+    existing.payload = payload; // use latest message as preview
+  }
+
+  const entry: PendingPush = existing ?? { timer: null as any, userIds, payload };
+  entry.timer = setTimeout(async () => {
+    pendingPushes.delete(chatId);
+    const tokens = await getTokens(entry.userIds);
+    if (tokens.length === 0) return;
+    const collapseKey = entry.payload.data?.chatId ?? chatId;
+    const messages = tokens.map((t) => ({
+      to: t.token,
+      sound: 'default',
+      title: entry.payload.title,
+      body: entry.payload.body,
+      data: entry.payload.data ?? {},
+      channelId: collapseKey,
+      tag: collapseKey,
+    }));
+    for (let i = 0; i < messages.length; i += 100) {
+      await fetch(EXPO_PUSH_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(messages.slice(i, i + 100)),
+      }).catch((e) => console.error('[push] debounced batch failed:', e));
+    }
+  }, PUSH_DEBOUNCE_MS);
+
+  if (!existing) pendingPushes.set(chatId, entry);
 }
 
 /**

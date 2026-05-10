@@ -12,6 +12,8 @@ import { sendPush, filterByPreference } from '../lib/notifications.js';
 import { enqueue } from '../lib/queue.js';
 import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
 import { cache, TTL, CK } from '../lib/cache.js';
+import { hashPhone } from '../utils/crypto.js';
+import { supabaseAdmin, CIRCLE_IMAGES_BUCKET } from '../lib/supabase-admin.js';
 import type { auth } from '../auth.js';
 
 type Variables = {
@@ -304,8 +306,10 @@ discoveryRoutes.get('/circles', async (c) => {
     return {
       id: gc.id,
       name: gc.name,
+      description: gc.description ?? null,
       categoryEmoji: gc.categoryEmoji,
       categoryColor: gc.categoryColor,
+      coverImage: gc.coverImage ?? null,
       memberCount,
       friendsInsideCount: friendsInside.length,
       requiresApproval: gc.requiresApproval,
@@ -492,6 +496,9 @@ circlesRoutes.post('/', async (c) => {
       joinedAt: new Date(),
     });
 
+    // New circle is public — bust circle suggestion cache for all users so it shows up immediately
+    cache.delPrefix('circles:suggest:');
+
     return c.json({ id: circle.id, joinCode: circle.joinCode, chatId: chat.id }, 201);
   } catch (err) {
     console.error('[circles] create failed:', err);
@@ -660,6 +667,19 @@ circlesRoutes.post('/accept/:userId', async (c) => {
   return c.json({ ok: true });
 });
 
+// DELETE /api/circles/disconnect/:userId -- remove a confirmed connection
+circlesRoutes.delete('/disconnect/:userId', async (c) => {
+  const me = c.get('user')!;
+  const targetId = c.req.param('userId');
+  await db.delete(circles).where(
+    sql`(${circles.userId} = ${me.id} AND ${circles.friendId} = ${targetId})
+      OR (${circles.userId} = ${targetId} AND ${circles.friendId} = ${me.id})`,
+  );
+  cache.del(CK.stats(me.id));
+  cache.del(CK.stats(targetId));
+  return c.json({ ok: true });
+});
+
 // DELETE /api/circles/decline/:userId
 circlesRoutes.delete('/decline/:userId', async (c) => {
   const me = c.get('user')!;
@@ -678,6 +698,203 @@ circlesRoutes.delete('/cancel/:userId', async (c) => {
   return c.json({ ok: true });
 });
 
+// GET /api/circles/:id -- circle detail (UUID regex prevents collision with /by-code/:code)
+circlesRoutes.get('/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}', async (c) => {
+  const me = c.get('user')!;
+  const circleId = c.req.param('id');
+
+  const [circle] = await db
+    .select()
+    .from(groupCircles)
+    .where(eq(groupCircles.id, circleId))
+    .limit(1);
+
+  if (!circle) return c.json({ error: 'Circle not found' }, 404);
+
+  const isAdmin = circle.adminUserId === me.id;
+
+  // My membership status
+  const [myMembership] = await db
+    .select({ status: groupCircleMembers.status })
+    .from(groupCircleMembers)
+    .where(and(eq(groupCircleMembers.groupCircleId, circleId), eq(groupCircleMembers.userId, me.id)))
+    .limit(1);
+
+  const myStatus = myMembership?.status ?? null;
+
+  // Active members with profile info
+  const memberRows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      image: users.image,
+      username: users.username,
+    })
+    .from(groupCircleMembers)
+    .innerJoin(users, eq(users.id, groupCircleMembers.userId))
+    .where(and(eq(groupCircleMembers.groupCircleId, circleId), eq(groupCircleMembers.status, 'active')));
+
+  // Pending members (admin only)
+  const pendingRows = isAdmin
+    ? await db
+        .select({
+          id: users.id,
+          name: users.name,
+          image: users.image,
+          username: users.username,
+        })
+        .from(groupCircleMembers)
+        .innerJoin(users, eq(users.id, groupCircleMembers.userId))
+        .where(and(eq(groupCircleMembers.groupCircleId, circleId), eq(groupCircleMembers.status, 'pending')))
+    : [];
+
+  return c.json({
+    circle: {
+      id: circle.id,
+      name: circle.name,
+      description: circle.description,
+      adminUserId: circle.adminUserId,
+      joinCode: circle.joinCode,
+      requiresApproval: circle.requiresApproval,
+      isPublic: circle.isPublic,
+      categoryEmoji: circle.categoryEmoji,
+      categoryColor: circle.categoryColor,
+      coverImage: circle.coverImage,
+    },
+    members: memberRows,
+    pendingMembers: pendingRows,
+    memberCount: memberRows.length,
+    isAdmin,
+    myStatus,
+  });
+});
+
+// PATCH /api/circles/:id -- admin-only: update name/description/emoji/color/privacy
+circlesRoutes.patch('/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}', async (c) => {
+  const me = c.get('user')!;
+  const circleId = c.req.param('id');
+  const body = await c.req.json<{
+    name?: string;
+    description?: string;
+    categoryEmoji?: string;
+    categoryColor?: string;
+    requiresApproval?: boolean;
+    isPublic?: boolean;
+  }>().catch(() => ({}));
+
+  const [circle] = await db.select({ adminUserId: groupCircles.adminUserId })
+    .from(groupCircles).where(eq(groupCircles.id, circleId)).limit(1);
+  if (!circle) return c.json({ error: 'Circle not found' }, 404);
+  if (circle.adminUserId !== me.id) return c.json({ error: 'Not the admin' }, 403);
+
+  const updates: Partial<typeof groupCircles.$inferInsert> = {};
+  if (body.name?.trim()) updates.name = body.name.trim();
+  if (body.description !== undefined) updates.description = body.description?.trim() || null;
+  if (body.categoryEmoji) updates.categoryEmoji = body.categoryEmoji;
+  if (body.categoryColor) updates.categoryColor = body.categoryColor;
+  if (body.requiresApproval !== undefined) updates.requiresApproval = body.requiresApproval;
+  if (body.isPublic !== undefined) updates.isPublic = body.isPublic;
+
+  await db.update(groupCircles).set(updates).where(eq(groupCircles.id, circleId));
+
+  // If privacy changed to public, bust suggestion cache for all users
+  if (body.isPublic === true) cache.delPrefix('circles:suggest:');
+
+  return c.json({ ok: true });
+});
+
+// POST /api/circles/:id/image -- admin-only: upload cover image
+circlesRoutes.post('/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/image', async (c) => {
+  const me = c.get('user')!;
+  const circleId = c.req.param('id');
+
+  const [circle] = await db.select({ adminUserId: groupCircles.adminUserId })
+    .from(groupCircles).where(eq(groupCircles.id, circleId)).limit(1);
+  if (!circle) return c.json({ error: 'Circle not found' }, 404);
+  if (circle.adminUserId !== me.id) return c.json({ error: 'Not the admin' }, 403);
+
+  const formData = await c.req.formData();
+  const file = formData.get('image') as File | null;
+  if (!file) return c.json({ error: 'No image provided' }, 400);
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'Image must be under 5 MB' }, 400);
+
+  const ext = file.type === 'image/png' ? 'png' : 'jpg';
+  const path = `${circleId}/cover.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const { error } = await supabaseAdmin.storage
+    .from(CIRCLE_IMAGES_BUCKET)
+    .upload(path, buffer, { contentType: file.type, upsert: true });
+  if (error) return c.json({ error: 'Upload failed' }, 500);
+
+  const { data: urlData } = supabaseAdmin.storage.from(CIRCLE_IMAGES_BUCKET).getPublicUrl(path);
+  const imageUrl = urlData.publicUrl;
+
+  await db.update(groupCircles).set({ coverImage: imageUrl }).where(eq(groupCircles.id, circleId));
+  return c.json({ ok: true, imageUrl });
+});
+
+// POST /api/circles/:id/approve/:userId
+circlesRoutes.post('/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/approve/:userId', async (c) => {
+  const me = c.get('user')!;
+  const circleId = c.req.param('id');
+  const targetUserId = c.req.param('userId');
+
+  const [circle] = await db.select({ adminUserId: groupCircles.adminUserId })
+    .from(groupCircles).where(eq(groupCircles.id, circleId)).limit(1);
+  if (!circle) return c.json({ error: 'Circle not found' }, 404);
+  if (circle.adminUserId !== me.id) return c.json({ error: 'Not the admin' }, 403);
+
+  await db.update(groupCircleMembers)
+    .set({ status: 'active' })
+    .where(and(eq(groupCircleMembers.groupCircleId, circleId), eq(groupCircleMembers.userId, targetUserId)));
+
+  const [existingChat] = await db
+    .select({ id: chats.id })
+    .from(chats)
+    .where(and(eq(chats.type, 'group'), eq(chats.groupCircleId, circleId)))
+    .limit(1);
+
+  if (existingChat) {
+    const now = new Date();
+    await db.insert(chatMembers)
+      .values({ chatId: existingChat.id, userId: targetUserId, joinedAt: now, lastReadAt: now })
+      .onConflictDoNothing();
+  }
+
+  cache.del(CK.stats(targetUserId));
+  return c.json({ ok: true });
+});
+
+// DELETE /api/circles/:id/members/:userId
+circlesRoutes.delete('/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/members/:userId', async (c) => {
+  const me = c.get('user')!;
+  const circleId = c.req.param('id');
+  const targetUserId = c.req.param('userId');
+
+  const [circle] = await db.select({ adminUserId: groupCircles.adminUserId })
+    .from(groupCircles).where(eq(groupCircles.id, circleId)).limit(1);
+  if (!circle) return c.json({ error: 'Circle not found' }, 404);
+  if (circle.adminUserId !== me.id) return c.json({ error: 'Not the admin' }, 403);
+
+  await db.delete(groupCircleMembers)
+    .where(and(eq(groupCircleMembers.groupCircleId, circleId), eq(groupCircleMembers.userId, targetUserId)));
+
+  const [existingChat] = await db
+    .select({ id: chats.id })
+    .from(chats)
+    .where(and(eq(chats.type, 'group'), eq(chats.groupCircleId, circleId)))
+    .limit(1);
+
+  if (existingChat) {
+    await db.delete(chatMembers)
+      .where(and(eq(chatMembers.chatId, existingChat.id), eq(chatMembers.userId, targetUserId)));
+  }
+
+  cache.del(CK.stats(targetUserId));
+  return c.json({ ok: true });
+});
+
 // GET /api/circles/by-code/:code
 circlesRoutes.get('/by-code/:code', async (c) => {
   const code = c.req.param('code').toUpperCase();
@@ -685,4 +902,43 @@ circlesRoutes.get('/by-code/:code', async (c) => {
   if (!circle) return c.json({ error: 'Circle not found' }, 404);
   const [{ value: memberCount }] = await db.select({ value: count() }).from(groupCircleMembers).where(and(eq(groupCircleMembers.groupCircleId, circle.id), eq(groupCircleMembers.status, 'active')));
   return c.json({ id: circle.id, name: circle.name, memberCount: Number(memberCount), requiresApproval: circle.requiresApproval });
+});
+
+// POST /api/contacts/sync -- find Berg users from device contacts
+discoveryRoutes.post('/contacts/sync', async (c) => {
+  const me = c.get('user')!;
+  const body = await c.req.json<{ phones: string[] }>().catch(() => ({ phones: [] }));
+
+  if (!Array.isArray(body.phones) || body.phones.length === 0) {
+    return c.json({ users: [] });
+  }
+
+  const phones = body.phones.slice(0, 500);
+  const hashes = phones.map((p) => hashPhone(p));
+
+  const matched = await db
+    .select({ id: users.id, name: users.name, username: users.username, image: users.image })
+    .from(users)
+    .where(and(inArray(users.phoneHash, hashes), sql`${users.id} != ${me.id}`));
+
+  if (matched.length === 0) {
+    await db.update(users).set({ contactSyncGranted: true }).where(eq(users.id, me.id));
+    return c.json({ users: [] });
+  }
+
+  const matchedIds = matched.map((u) => u.id);
+  const existing = await db
+    .select({ friendId: circles.friendId })
+    .from(circles)
+    .where(and(eq(circles.userId, me.id), inArray(circles.friendId, matchedIds)));
+
+  const connectedSet = new Set(existing.map((r) => r.friendId));
+
+  const result = matched
+    .filter((u) => !connectedSet.has(u.id))
+    .map((u) => ({ ...u, connectionStatus: null as 'pending' | 'confirmed' | null }));
+
+  await db.update(users).set({ contactSyncGranted: true }).where(eq(users.id, me.id));
+
+  return c.json({ users: result });
 });
