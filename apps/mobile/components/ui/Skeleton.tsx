@@ -1,5 +1,13 @@
-import { useEffect, useRef } from 'react';
-import { Animated, View, ViewStyle } from 'react-native';
+import { useEffect } from 'react';
+import { View, ViewStyle } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 type Props = {
   width?: number | string;
@@ -8,22 +16,21 @@ type Props = {
   style?: ViewStyle;
 };
 
-/**
- * Pulsing skeleton loader — use instead of empty views while content loads.
- */
 export function Skeleton({ width = '100%', height = 16, borderRadius = 8, style }: Props) {
-  const opacity = useRef(new Animated.Value(1)).current;
+  const opacity = useSharedValue(1);
 
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1,   duration: 700, useNativeDriver: true }),
-      ]),
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.35, { duration: 750, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 750, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      false,
     );
-    pulse.start();
-    return () => pulse.stop();
-  }, [opacity]);
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   return (
     <Animated.View
@@ -33,31 +40,24 @@ export function Skeleton({ width = '100%', height = 16, borderRadius = 8, style 
           height,
           borderRadius,
           backgroundColor: '#E8E0D5',
-          opacity,
         },
+        animStyle,
         style,
       ]}
     />
   );
 }
 
-/** A row of skeleton lines mimicking a text block. */
 export function SkeletonText({ lines = 2 }: { lines?: number }) {
   return (
     <View style={{ gap: 7 }}>
       {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton
-          key={i}
-          height={12}
-          width={i === lines - 1 ? '65%' : '90%'}
-          borderRadius={6}
-        />
+        <Skeleton key={i} height={12} width={i === lines - 1 ? '65%' : '90%'} borderRadius={6} />
       ))}
     </View>
   );
 }
 
-/** Skeleton for a horizontal person card. */
 export function SkeletonPersonCard() {
   return (
     <View
@@ -70,6 +70,11 @@ export function SkeletonPersonCard() {
         gap: 10,
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.06)',
+        shadowColor: '#8B6A4A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 3,
       }}
     >
       <Skeleton width={56} height={56} borderRadius={28} />
@@ -80,21 +85,19 @@ export function SkeletonPersonCard() {
   );
 }
 
-/** Skeleton for a chat list row. */
 export function SkeletonChatRow() {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}>
       <Skeleton width={46} height={46} borderRadius={23} />
       <View style={{ flex: 1, gap: 7 }}>
-        <Skeleton width={120} height={12} borderRadius={6} />
-        <Skeleton width={180} height={10} borderRadius={5} />
+        <Skeleton width={120} height={13} borderRadius={6} />
+        <Skeleton width={180} height={11} borderRadius={5} />
       </View>
       <Skeleton width={30} height={10} borderRadius={5} />
     </View>
   );
 }
 
-/** Skeleton for a motive card. */
 export function SkeletonMotiveCard() {
   return (
     <View
@@ -102,19 +105,22 @@ export function SkeletonMotiveCard() {
         backgroundColor: '#fff',
         borderRadius: 18,
         marginHorizontal: 16,
-        marginBottom: 8,
+        marginBottom: 10,
         overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.06)',
+        shadowColor: '#8B6A4A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 3,
       }}
     >
-      <Skeleton width='100%' height={3} borderRadius={0} style={{ opacity: 0.4 }} />
-      <View style={{ padding: 13, gap: 8 }}>
-        <Skeleton width='75%' height={14} borderRadius={6} />
-        <Skeleton width='55%' height={11} borderRadius={5} />
-        <View style={{ flexDirection: 'row', gap: 0, marginTop: 2 }}>
-          {[0, 1, 2].map(i => (
-            <Skeleton key={i} width={22} height={22} borderRadius={11} style={{ marginLeft: i > 0 ? -7 : 0 }} />
+      <Skeleton width="100%" height={3} borderRadius={0} style={{ opacity: 0.4 }} />
+      <View style={{ padding: 14, gap: 9 }}>
+        <Skeleton width="75%" height={15} borderRadius={6} />
+        <Skeleton width="55%" height={12} borderRadius={5} />
+        <View style={{ flexDirection: 'row', marginTop: 4 }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} width={24} height={24} borderRadius={12} style={{ marginLeft: i > 0 ? -8 : 0 }} />
           ))}
         </View>
       </View>
@@ -122,23 +128,50 @@ export function SkeletonMotiveCard() {
   );
 }
 
-/** Skeleton for a circle suggestion row. */
 export function SkeletonCircleRow() {
   return (
     <View
       style={{
-        flexDirection: 'row', alignItems: 'center', gap: 12,
-        backgroundColor: '#fff', borderRadius: 16,
-        padding: 13, marginBottom: 8,
-        borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 8,
+        shadowColor: '#8B6A4A',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 8,
+        elevation: 2,
       }}
     >
       <Skeleton width={44} height={44} borderRadius={13} />
       <View style={{ flex: 1, gap: 6 }}>
-        <Skeleton width={120} height={12} borderRadius={6} />
-        <Skeleton width={80} height={10} borderRadius={5} />
+        <Skeleton width={120} height={13} borderRadius={6} />
+        <Skeleton width={80} height={11} borderRadius={5} />
       </View>
-      <Skeleton width={50} height={30} borderRadius={10} />
+      <Skeleton width={50} height={32} borderRadius={10} />
+    </View>
+  );
+}
+
+export function SkeletonProfileHeader() {
+  return (
+    <View style={{ alignItems: 'center', gap: 12, paddingVertical: 24, paddingHorizontal: 20 }}>
+      <Skeleton width={88} height={88} borderRadius={44} />
+      <Skeleton width={140} height={18} borderRadius={8} />
+      <Skeleton width={200} height={13} borderRadius={6} />
+      <View style={{ flexDirection: 'row', gap: 24, marginTop: 4 }}>
+        <View style={{ alignItems: 'center', gap: 4 }}>
+          <Skeleton width={36} height={20} borderRadius={6} />
+          <Skeleton width={60} height={11} borderRadius={5} />
+        </View>
+        <View style={{ alignItems: 'center', gap: 4 }}>
+          <Skeleton width={36} height={20} borderRadius={6} />
+          <Skeleton width={60} height={11} borderRadius={5} />
+        </View>
+      </View>
     </View>
   );
 }

@@ -1,6 +1,7 @@
 import React from 'react';
-import { TouchableOpacity, Text, View, ViewStyle } from 'react-native';
+import { Text, View, ViewStyle } from 'react-native';
 import { useTheme } from '../../hooks/use-theme';
+import { AnimatedPressable } from './AnimatedPressable';
 
 type PillProps = {
   label: string;
@@ -13,26 +14,26 @@ type PillProps = {
 export function Pill({ label, emoji, selected = false, onPress, style }: PillProps) {
   const { colors, fonts, radius } = useTheme();
 
+  const pillStyle: ViewStyle = {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.full,
+    borderWidth: selected ? 0 : 1.5,
+    backgroundColor: selected ? colors.primary : colors.surface,
+    borderColor: colors.border,
+    gap: 5,
+    shadowColor: selected ? colors.primary : colors.cardShadowColor,
+    shadowOffset: { width: 0, height: selected ? 3 : 1 },
+    shadowOpacity: selected ? 0.25 : 0.05,
+    shadowRadius: selected ? 8 : 3,
+    elevation: selected ? 3 : 1,
+  };
+
   const content = (
-    <View
-      style={[
-        {
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: radius.full,
-          borderWidth: 1.5,
-          backgroundColor: selected ? colors.primary : colors.surfaceAlt,
-          borderColor: selected ? colors.primary : colors.border,
-          gap: 4,
-        },
-        style,
-      ]}
-    >
-      {emoji && (
-        <Text style={{ fontSize: 14 }}>{emoji}</Text>
-      )}
+    <View style={[pillStyle, style]}>
+      {emoji && <Text style={{ fontSize: 14 }}>{emoji}</Text>}
       <Text
         style={{
           fontFamily: fonts.bodySemiBold,
@@ -47,9 +48,9 @@ export function Pill({ label, emoji, selected = false, onPress, style }: PillPro
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <AnimatedPressable onPress={onPress} pressScale={0.93} haptic={true}>
         {content}
-      </TouchableOpacity>
+      </AnimatedPressable>
     );
   }
 

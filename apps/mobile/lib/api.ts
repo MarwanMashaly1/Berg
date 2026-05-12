@@ -94,6 +94,10 @@ export function markNotificationRead(id: string) {
 
 // ─── Push token ────────────────────────────────────────────────────────────────
 
+export function getUserMe() {
+  return apiFetch<{ user: { id: string; name: string | null; displayName: string | null; username: string | null; bio: string | null; image: string | null; availabilityStatus: string; onboardingCompleted: boolean | null } | null }>('/api/users/me');
+}
+
 export function getPublicUser(userId: string) {
   return apiFetch<{
     user: {
@@ -146,8 +150,19 @@ export async function searchUsers(q: string) {
   );
 }
 
+export async function syncContacts(phones: string[]) {
+  return apiFetch<{ users: UserSearchResult[] }>('/api/discovery/contacts/sync', {
+    method: 'POST',
+    body: JSON.stringify({ phones }),
+  });
+}
+
 export async function getVibeTags() {
   return apiFetch<{ tags: Array<{ id: string; label: string; emoji: string; category: string }> }>('/api/vibe-tags');
+}
+
+export async function getUserVibeTags() {
+  return apiFetch<{ tagIds: string[] }>('/api/users/me/vibe-tags');
 }
 
 export async function postUserVibeTags(tagIds: string[]) {
@@ -220,8 +235,10 @@ export function getDiscoveryPeople() {
 export type CircleSuggestion = {
   id: string;
   name: string;
+  description?: string | null;
   categoryEmoji: string;
   categoryColor: string;
+  coverImage: string | null;
   memberCount: number;
   friendsInsideCount: number;
   requiresApproval: boolean;
@@ -263,7 +280,7 @@ export type ProfileConnection = {
 };
 export type PendingConnection = { id: string; name: string | null; image: string | null };
 export type SentConnection = { id: string; name: string | null; image: string | null };
-export type ProfileCircle = { id: string; name: string; categoryEmoji: string; categoryColor: string; memberCount: number; friendsInsideCount: number; memberPreviews: Array<{ id: string; name: string | null; image: string | null }> };
+export type ProfileCircle = { id: string; name: string; categoryEmoji: string; categoryColor: string; coverImage: string | null; memberCount: number; friendsInsideCount: number; memberPreviews: Array<{ id: string; name: string | null; image: string | null }> };
 export type InviteLink = { code: string; url: string };
 
 export function getProfileStats() {
@@ -308,6 +325,7 @@ export type CircleDetail = {
   description: string | null;
   categoryEmoji: string;
   categoryColor: string;
+  coverImage: string | null;
   requiresApproval: boolean;
   isPublic: boolean;
   joinCode: string | null;
@@ -360,6 +378,20 @@ export function updateCircle(circleId: string, body: {
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+}
+
+export async function uploadCircleImage(circleId: string, localUri: string, mimeType: string) {
+  const cookies = authClient.getCookie();
+  const formData = new FormData();
+  formData.append('image', { uri: localUri, type: mimeType, name: 'cover.jpg' } as any);
+  const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+  const res = await fetch(`${API_URL}/api/circles/${circleId}/image`, {
+    method: 'POST',
+    headers: cookies ? { Cookie: cookies } : undefined,
+    body: formData,
+  });
+  if (!res.ok) throw new Error('Upload failed');
+  return res.json() as Promise<{ ok: boolean; imageUrl: string }>;
 }
 
 export function approveMember(circleId: string, userId: string) {
@@ -564,10 +596,10 @@ export function getChatMessages(chatId: string, before?: string) {
   );
 }
 
-export function sendMessage(chatId: string, content: string) {
+export function sendMessage(chatId: string, content: string, type: 'text' | 'image' | 'gif' = 'text') {
   return apiFetch<{ message: ChatMessage }>(`/api/chats/${chatId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, type }),
   });
 }
 
@@ -597,6 +629,17 @@ export function getChatImageUploadUrl(chatId: string, contentType: string, ext: 
     `/api/chats/${chatId}/upload-url`,
     { method: 'POST', body: JSON.stringify({ contentType, ext }) },
   );
+}
+
+export function getOrCreateDirectChat(userId: string) {
+  return apiFetch<{ id: string; isNew: boolean }>('/api/chats/direct', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export function removeConnection(userId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/circles/disconnect/${userId}`, { method: 'DELETE' });
 }
 
 // ─── Memories ─────────────────────────────────────────────────────────────────

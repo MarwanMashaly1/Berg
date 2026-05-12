@@ -7,6 +7,13 @@ import {
   ViewStyle,
   StyleSheet,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+  interpolateColor,
+} from 'react-native-reanimated';
 import { useTheme } from '../../hooks/use-theme';
 
 type InputProps = TextInputProps & {
@@ -14,7 +21,7 @@ type InputProps = TextInputProps & {
   error?: string;
   hint?: string;
   containerStyle?: ViewStyle;
-  prefix?: string;  // e.g. country code "+1"
+  prefix?: string;
 };
 
 export function Input({
@@ -28,6 +35,29 @@ export function Input({
 }: InputProps) {
   const { colors, fonts, radius } = useTheme();
   const [focused, setFocused] = useState(false);
+
+  const focusProgress = useSharedValue(0);
+
+  const borderStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(
+      focusProgress.value,
+      [0, 1],
+      [error ? colors.error : colors.border, error ? colors.error : 'rgba(26,26,26,0.28)'],
+    ),
+    borderWidth: 1.5,
+  }));
+
+  function handleFocus(e: any) {
+    setFocused(true);
+    focusProgress.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.ease) });
+    props.onFocus?.(e);
+  }
+
+  function handleBlur(e: any) {
+    setFocused(false);
+    focusProgress.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.ease) });
+    props.onBlur?.(e);
+  }
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -43,18 +73,11 @@ export function Input({
           {label}
         </Text>
       )}
-      <View
+      <Animated.View
         style={[
           styles.inputRow,
-          {
-            borderRadius: radius.md,
-            borderColor: error
-              ? colors.error
-              : focused
-              ? colors.borderFocus
-              : colors.border,
-            backgroundColor: colors.surface,
-          },
+          { borderRadius: radius.md, backgroundColor: colors.surface },
+          borderStyle,
         ]}
       >
         {prefix && (
@@ -80,28 +103,22 @@ export function Input({
               color: colors.text,
               paddingHorizontal: prefix ? 0 : 14,
               paddingVertical: 14,
-              minHeight: 48,
+              minHeight: 50,
             },
             style,
           ]}
           placeholderTextColor={colors.textTertiary}
-          onFocus={() => {
-            setFocused(true);
-            props.onFocus?.({} as any);
-          }}
-          onBlur={() => {
-            setFocused(false);
-            props.onBlur?.({} as any);
-          }}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         />
-      </View>
+      </Animated.View>
       {(error || hint) && (
         <Text
           style={{
             fontFamily: fonts.body,
             fontSize: 12,
             color: error ? colors.error : colors.textTertiary,
-            marginTop: 4,
+            marginTop: 5,
           }}
         >
           {error ?? hint}
@@ -116,6 +133,5 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
   },
 });
