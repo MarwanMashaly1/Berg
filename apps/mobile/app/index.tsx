@@ -2,9 +2,13 @@ import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
 import { authClient } from '../lib/auth';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Colors } from '../constants/theme';
+
+// Required for expo-web-browser openAuthSessionAsync to resolve when berg:/// arrives
+WebBrowser.maybeCompleteAuthSession();
 
 /**
  * Session routing splash screen.

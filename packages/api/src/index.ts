@@ -114,6 +114,19 @@ app.route('/api/places', placesRoutes);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/admin', adminRoutes);
 
+// --- Google OAuth callback debug logger --------------------------------------
+app.get('/api/auth/callback/google', async (c, next) => {
+  const code = c.req.query('code');
+  const error = c.req.query('error');
+  const errorDesc = c.req.query('error_description');
+  const state = c.req.query('state');
+  console.log(`[google-oauth] callback hit — code:${code ? 'YES' : 'NO'} error:${error ?? 'none'} errorDesc:${errorDesc ?? 'none'} state:${state ? 'YES' : 'NO'}`);
+  console.log(`[google-oauth] GOOGLE_CLIENT_ID set: ${!!process.env.GOOGLE_CLIENT_ID}`);
+  console.log(`[google-oauth] GOOGLE_CLIENT_SECRET set: ${!!process.env.GOOGLE_CLIENT_SECRET}`);
+  console.log(`[google-oauth] BETTER_AUTH_URL: ${process.env.BETTER_AUTH_URL ?? '(not set)'}`);
+  return next();
+});
+
 // --- BetterAuth handler -- catches all remaining /api/auth/* ------------------
 app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
   const timeout = new Promise<Response>((_, reject) =>

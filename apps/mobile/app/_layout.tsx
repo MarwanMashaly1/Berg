@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { View, LogBox } from 'react-native';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { Stack, useNavigationContainerRef, usePathname } from 'expo-router';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
@@ -61,6 +63,18 @@ export default Sentry.wrap(function RootLayout() {
     navigationIntegration.registerNavigationContainer(navigationRef);
   }, []);
 
+  // DEBUG: log every incoming deep link so we can see if berg:/// callback arrives
+  useEffect(() => {
+    Linking.getInitialURL().then((url) => {
+      console.log('[deeplink] initial URL:', url);
+    });
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      console.log('[deeplink] received:', url);
+      WebBrowser.maybeCompleteAuthSession();
+    });
+    return () => sub.remove();
+  }, []);
+
   const [fontsLoaded] = useFonts({
     Fraunces_400Regular,
     Fraunces_600SemiBold,
@@ -73,13 +87,11 @@ export default Sentry.wrap(function RootLayout() {
   useEffect(() => {
     if (!fontsLoaded) return;
 
-    registerForPushNotificationsAsync().then((token) => {
-      if (token) {
-        savePushToken(token).catch(() => {
-          // Non-fatal — token registration failure should not crash the app
-        });
-      }
-    });
+    registerForPushNotificationsAsync()
+      .then((token) => {
+        if (token) savePushToken(token).catch(() => {});
+      })
+      .catch(() => {});
 
     // Handle notification taps while app is foregrounded or in background
     const tapSub = Notifications.addNotificationResponseReceivedListener((response) => {

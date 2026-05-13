@@ -23,8 +23,13 @@ function TabIcon({
   active: boolean;
 }) {
   const scale = useSharedValue(active ? 1 : 0.85);
+
+  useEffect(() => {
+    scale.value = withSpring(active ? 1 : 0.85, { damping: 15, stiffness: 300 });
+  }, [active]);
+
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: withSpring(active ? 1 : 0.85, { damping: 15, stiffness: 300 }) }],
+    transform: [{ scale: scale.value }],
   }));
 
   return (

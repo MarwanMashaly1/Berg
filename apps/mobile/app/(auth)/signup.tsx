@@ -74,17 +74,22 @@ export default function SignUpScreen() {
     setGoogleLoading(true);
     setGoogleError('');
     try {
-      // callbackURL must be a deep link — the expo client intercepts the redirect
       const callbackURL = Linking.createURL('/');
-      await authClient.signIn.social({ provider: 'google', callbackURL });
+      console.log('[google] callbackURL:', callbackURL);
+      console.log('[google] API baseURL:', process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000 (fallback)');
+      console.log('[google] calling authClient.signIn.social...');
+      const result = await authClient.signIn.social({ provider: 'google', callbackURL });
+      console.log('[google] signIn.social resolved:', JSON.stringify(result));
       router.replace('/(app)/(tabs)/discovery');
     } catch (err: unknown) {
+      console.log('[google] ERROR:', err);
       const message = err instanceof Error ? err.message : '';
       if (message && !message.toLowerCase().includes('cancel')) {
         captureError(err, { screen: 'signup', action: 'google-sign-in' });
         setGoogleError('Google sign-in failed. Try again or use email.');
       }
     } finally {
+      console.log('[google] finally — loading=false');
       setGoogleLoading(false);
     }
   }

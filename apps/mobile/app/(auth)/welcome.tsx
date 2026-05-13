@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, useWindowDimensions, Linking } from 'react-native';
 import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { Colors, Fonts } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { GrainTexture } from '../../components/ui/GrainTexture';
@@ -13,6 +14,7 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <StatusBar style="light" />
       <GrainTexture />
 
       {/* Warm orange glow rising from the bottom — dark moment accent */}

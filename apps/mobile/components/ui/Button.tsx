@@ -6,15 +6,14 @@ import {
   ViewStyle,
   TextStyle,
   View,
+  Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  runOnJS,
 } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../hooks/use-theme';
 
@@ -51,26 +50,22 @@ export function Button({
 
   const scale = useSharedValue(1);
 
-  function triggerHaptic() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }
-
-  const tap = Gesture.Tap()
-    .enabled(!isDisabled)
-    .onBegin(() => {
-      scale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
-    })
-    .onEnd(() => {
-      runOnJS(triggerHaptic)();
-      runOnJS(onPress)();
-    })
-    .onFinalize(() => {
-      scale.value = withSpring(1, { damping: 12, stiffness: 300 });
-    });
-
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
+
+  function handlePressIn() {
+    scale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
+  }
+
+  function handlePressOut() {
+    scale.value = withSpring(1, { damping: 12, stiffness: 300 });
+  }
+
+  function handlePress() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    onPress();
+  }
 
   const baseContainer: ViewStyle = {
     borderRadius: radius.lg,
@@ -110,19 +105,20 @@ export function Button({
   );
 
   return (
-    <GestureDetector gesture={tap}>
+    <Pressable
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      disabled={isDisabled}
+      style={fullWidth ? { alignSelf: 'stretch' } : undefined}
+    >
       <Animated.View style={[animatedStyle, fullWidth && { alignSelf: 'stretch' }]}>
         {variant === 'primary' ? (
           <LinearGradient
             colors={['#FF8050', '#FF6B35']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[
-              baseContainer,
-              sizeStyle,
-              styles.primaryShadow,
-              style,
-            ]}
+            style={[baseContainer, sizeStyle, styles.primaryShadow, style]}
           >
             {content}
           </LinearGradient>
@@ -147,7 +143,7 @@ export function Button({
           </View>
         )}
       </Animated.View>
-    </GestureDetector>
+    </Pressable>
   );
 }
 
