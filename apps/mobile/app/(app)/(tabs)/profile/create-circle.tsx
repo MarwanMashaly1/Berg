@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, Share, KeyboardAvoidingView, Platform,
+  ScrollView, Switch, Share, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Fonts } from '../../../../constants/theme';
-import { createCircle } from '../../../../lib/api';
+import { createCircle, uploadCircleImage } from '../../../../lib/api';
 import { CATEGORIES } from '../../../../constants/motives';
 
 const C = Colors.light;
@@ -46,11 +48,27 @@ export default function CreateCircleScreen() {
   const [isPublic, setIsPublic] = useState(true);
   const [requiresApproval, setRequiresApproval] = useState(false);
 
+  // Step 1: cover image (picked locally, uploaded after creation)
+  const [coverImageUri, setCoverImageUri] = useState<string | null>(null);
+  const [coverImageMime, setCoverImageMime] = useState<string>('image/jpeg');
+
   // Step 3: share code
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+
+  async function handlePickImage() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setCoverImageUri(result.assets[0].uri);
+    setCoverImageMime(result.assets[0].mimeType ?? 'image/jpeg');
+  }
 
   async function handleCreate() {
     setCreating(true);
@@ -64,6 +82,10 @@ export default function CreateCircleScreen() {
         isPublic,
         requiresApproval,
       });
+      // Upload cover image if one was selected
+      if (coverImageUri) {
+        await uploadCircleImage(result.id, coverImageUri, coverImageMime).catch(() => {});
+      }
       setCreatedId(result.id);
       setJoinCode(result.joinCode);
       setStep(3);
@@ -156,13 +178,24 @@ export default function CreateCircleScreen() {
           {step === 1 && (
             <View style={styles.stepContent}>
               <Text style={styles.stepHeading}>Give it a look</Text>
-              <Text style={styles.stepSub}>Pick an emoji and color that represent your circle.</Text>
+              <Text style={styles.stepSub}>Pick a cover photo, emoji, and color for your circle.</Text>
 
-              {/* Preview */}
-              <View style={[styles.preview, { backgroundColor: color }]}>
-                <Text style={styles.previewEmoji}>{emoji}</Text>
-                <Text style={styles.previewName}>{name}</Text>
-              </View>
+              {/* Cover photo picker */}
+              <TouchableOpacity style={styles.coverPickerWrap} onPress={handlePickImage} activeOpacity={0.8}>
+                {coverImageUri ? (
+                  <Image source={{ uri: coverImageUri }} style={styles.coverPickerImage} />
+                ) : (
+                  <View style={[styles.coverPickerPlaceholder, { backgroundColor: color }]}>
+                    <Text style={{ fontSize: 36 }}>{emoji}</Text>
+                  </View>
+                )}
+                <View style={styles.coverPickerBadge}>
+                  <MaterialIcons name="photo-camera" size={15} color="#fff" />
+                  <Text style={styles.coverPickerBadgeText}>
+                    {coverImageUri ? 'Change photo' : 'Add cover photo'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
               <Text style={styles.fieldLabel}>Emoji</Text>
               <View style={styles.emojiGrid}>
@@ -314,6 +347,21 @@ const styles = StyleSheet.create({
   nextBtn: { backgroundColor: C.primary, borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 8 },
   nextBtnDisabled: { opacity: 0.5 },
   nextBtnText: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: C.textInverse },
+  coverPickerWrap: { position: 'relative', marginBottom: 4 },
+  coverPickerImage: { width: '100%', height: 150, borderRadius: 16 },
+  coverPickerPlaceholder: {
+    width: '100%', height: 150, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  coverPickerBadge: {
+    position: 'absolute', bottom: 10, left: 0, right: 0,
+    alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6,
+  },
+  coverPickerBadgeText: {
+    fontFamily: Fonts.bodySemiBold, fontSize: 13,
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
   preview: { borderRadius: 18, padding: 20, alignItems: 'center', marginBottom: 8 },
   previewEmoji: { fontSize: 44, marginBottom: 6 },
   previewName: { fontFamily: Fonts.heading, fontSize: 17, color: C.text, textAlign: 'center' },

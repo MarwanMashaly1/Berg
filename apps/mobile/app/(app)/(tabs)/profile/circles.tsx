@@ -1,13 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Modal, RefreshControl, Alert,
+  StyleSheet, Modal, RefreshControl, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../../../constants/theme';
 import { Avatar } from '../../../../components/ui/Avatar';
 import { getProfileCircles, getCircleByCode, joinCircle, ProfileCircle } from '../../../../lib/api';
+import { CircleIcon } from '../../../../components/ui/CircleIcon';
 
 const C = Colors.light;
 
@@ -18,13 +19,19 @@ export default function CirclesScreen() {
   const [codeError, setCodeError]     = useState('');
   const [joining, setJoining]         = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
+  const [loading, setLoading]         = useState(true);
   const [confirmCircle, setConfirmCircle] = useState<{
     name: string; memberCount: number; status: 'active' | 'pending';
   } | null>(null);
 
   const loadData = useCallback(async () => {
-    const result = await getProfileCircles().catch(() => null);
-    if (result) setJoined(result.joined);
+    setLoading(true);
+    try {
+      const result = await getProfileCircles().catch(() => null);
+      if (result) setJoined(result.joined);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -69,13 +76,21 @@ export default function CirclesScreen() {
         </TouchableOpacity>
       </View>
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />}
       >
         {/* Joined circles */}
-        {joined.length > 0 && (
+        {loading && joined.length === 0 && (
+          <View style={styles.section}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={{ height: 72, backgroundColor: '#E8E0D5', borderRadius: 14, marginBottom: 8 }} />
+            ))}
+          </View>
+        )}
+        {!loading && joined.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>JOINED · {joined.length}</Text>
             {joined.map(ci => (
@@ -85,9 +100,12 @@ export default function CirclesScreen() {
                 onPress={() => router.push({ pathname: '/(app)/(tabs)/profile/circle-detail', params: { id: ci.id } } as any)}
                 activeOpacity={0.8}
               >
-                <View style={[styles.circleIcon, { backgroundColor: ci.categoryColor }]}>
-                  <Text style={{ fontSize: 18 }}>{ci.categoryEmoji}</Text>
-                </View>
+                <CircleIcon
+                  coverImage={ci.coverImage}
+                  categoryEmoji={ci.categoryEmoji}
+                  categoryColor={ci.categoryColor}
+                  size={40}
+                />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.circleName}>{ci.name}</Text>
                   <Text style={styles.circleMeta}>
@@ -167,12 +185,13 @@ export default function CirclesScreen() {
           {codeError ? <Text style={styles.codeError}>{codeError}</Text> : null}
         </View>
 
-        {joined.length === 0 && (
+        {!loading && joined.length === 0 && (
           <Text style={styles.emptyText}>
             You haven't joined any circles yet.{'\n'}Create one or enter a code to get started.
           </Text>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Join confirmation modal */}
       {confirmCircle && (

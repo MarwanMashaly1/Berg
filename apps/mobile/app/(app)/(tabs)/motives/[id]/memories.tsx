@@ -26,11 +26,11 @@ const Cl = Colors.light;
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - 4) / 3;
 
-// ─── Rating emoji ─────────────────────────────────────────────────────────────
+// ─── Rating display ───────────────────────────────────────────────────────────
 
-function ratingEmoji(r: number | null): string {
+function ratingStars(r: number | null): string {
   if (!r) return '';
-  return ['', '😬', '😐', '🙂', '😄', '🔥'][r] ?? '';
+  return '★'.repeat(r);
 }
 
 // ─── Full-screen photo viewer ─────────────────────────────────────────────────
@@ -169,7 +169,7 @@ function PersonSection({
           </Text>
           <View style={styles.personMeta}>
             {contributor.rating != null && (
-              <Text style={styles.personRating}>{ratingEmoji(contributor.rating)}</Text>
+              <Text style={styles.personRating}>{ratingStars(contributor.rating)}</Text>
             )}
             {contributor.vibeTags.length > 0 && (
               <Text style={styles.personVibes} numberOfLines={1}>
@@ -417,6 +417,7 @@ const styles = StyleSheet.create({
   },
   personRating: {
     fontSize: 13,
+    color: Colors.light.primary,
   },
   personVibes: {
     fontFamily: Fonts.body,

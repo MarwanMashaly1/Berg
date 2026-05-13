@@ -119,8 +119,12 @@ export default function ChatListScreen() {
     setRefreshing(false);
   }
 
-  // Reload whenever the screen comes back into focus (e.g. returning from a chat room)
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  // Reload on focus + refresh timestamps every 60s while screen is active
+  useFocusEffect(useCallback(() => {
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => clearInterval(timer);
+  }, [load]));
 
   useEffect(() => {
     load();

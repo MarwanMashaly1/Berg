@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../../constants/theme';
 import { Avatar } from '../../../components/ui/Avatar';
-import { getPublicUser, requestConnection } from '../../../lib/api';
+import { getPublicUser, requestConnection, getOrCreateDirectChat, removeConnection } from '../../../lib/api';
 
 const C = Colors.light;
 
@@ -35,8 +35,11 @@ export default function PublicUserProfile() {
     connectionStatus: 'pending' | 'confirmed' | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [requested, setRequested] = useState(false);
+  const [messaging, setMessaging] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -54,6 +57,7 @@ export default function PublicUserProfile() {
     getPublicUser(id)
       .then(({ user: u }) => {
         setUser({ ...u, vibeTags: u.vibeTags ?? [], connectionStatus: u.connectionStatus ?? null });
+        setProfileLoaded(true);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -67,6 +71,39 @@ export default function PublicUserProfile() {
       setRequested(true);
     } catch { /* ignore */ }
     finally { setConnecting(false); }
+  }
+
+  async function handleMessage() {
+    if (!id || messaging) return;
+    setMessaging(true);
+    try {
+      const { id: chatId } = await getOrCreateDirectChat(id);
+      router.push(`/(app)/(tabs)/chat/${chatId}?type=direct&name=${encodeURIComponent(user?.name ?? 'Chat')}`);
+    } catch { /* ignore */ }
+    finally { setMessaging(false); }
+  }
+
+  function handleDisconnect() {
+    Alert.alert(
+      'Disconnect',
+      `Remove ${user?.name ?? 'this person'} from your connections?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            if (disconnecting) return;
+            setDisconnecting(true);
+            try {
+              await removeConnection(id);
+              setUser(prev => prev ? { ...prev, connectionStatus: null } : prev);
+            } catch { /* ignore */ }
+            finally { setDisconnecting(false); }
+          },
+        },
+      ],
+    );
   }
 
   const connectionStatus = requested ? 'pending' : user?.connectionStatus ?? null;
@@ -121,12 +158,32 @@ export default function PublicUserProfile() {
 
         {/* Connect CTA */}
         <View style={styles.ctaSection}>
-          {loading && !user ? (
+          {!profileLoaded ? (
             <ActivityIndicator color={C.primary} />
           ) : connectionStatus === 'confirmed' ? (
-            <View style={[styles.connectBtn, styles.connectBtnDone]}>
-              <Text style={[styles.connectText, styles.connectTextDone]}>Connected ✓</Text>
-            </View>
+            <>
+              <TouchableOpacity
+                style={[styles.connectBtn, messaging && { opacity: 0.6 }]}
+                onPress={handleMessage}
+                disabled={messaging}
+                activeOpacity={0.85}
+              >
+                {messaging
+                  ? <ActivityIndicator size="small" color={C.textInverse} />
+                  : <Text style={styles.connectText}>Message</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.disconnectLink}
+                onPress={handleDisconnect}
+                disabled={disconnecting}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.disconnectText}>
+                  {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                </Text>
+              </TouchableOpacity>
+            </>
           ) : connectionStatus === 'pending' ? (
             <View style={[styles.connectBtn, styles.connectBtnPending]}>
               <Text style={[styles.connectText, styles.connectTextPending]}>Request sent · waiting</Text>
@@ -247,6 +304,8 @@ const styles = StyleSheet.create({
   },
   connectTextDone: { color: C.success },
   connectTextPending: { color: C.textSecondary },
+  disconnectLink: { alignItems: 'center', paddingVertical: 12 },
+  disconnectText: { fontFamily: Fonts.body, fontSize: 13, color: C.textTertiary },
 
   // Vibe tags
   tagsSection: {

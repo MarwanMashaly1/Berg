@@ -8,6 +8,7 @@ import { Colors, Fonts } from '../../constants/theme';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { BackButton } from '../../components/ui/BackButton';
 import { getDiscoveryCircles, joinCircle, CircleSuggestion } from '../../lib/api';
+import { CircleIcon } from '../../components/ui/CircleIcon';
 
 const C = Colors.light;
 
@@ -38,11 +39,18 @@ function CircleRow({ circle, onJoined }: { circle: CircleSuggestion; onJoined: (
   return (
     <>
       <View style={styles.row}>
-        <View style={[styles.icon, { backgroundColor: circle.categoryColor }]}>
-          <Text style={styles.iconText}>{circle.categoryEmoji}</Text>
-        </View>
+        <CircleIcon
+          coverImage={circle.coverImage}
+          categoryEmoji={circle.categoryEmoji}
+          categoryColor={circle.categoryColor}
+          size={44}
+          borderRadius={14}
+        />
         <View style={styles.info}>
           <Text style={styles.circleName} numberOfLines={1}>{circle.name}</Text>
+          {circle.description ? (
+            <Text style={styles.circleDesc} numberOfLines={2}>{circle.description}</Text>
+          ) : null}
           <Text style={styles.circleMeta}>
             {circle.memberCount} members
             {circle.friendsInsideCount > 0
@@ -69,9 +77,14 @@ function CircleRow({ circle, onJoined }: { circle: CircleSuggestion; onJoined: (
       {showConfirm && (
         <Modal visible animationType="fade" transparent statusBarTranslucent>
           <View style={styles.overlay}>
-            <View style={[styles.confirmIcon, { backgroundColor: circle.categoryColor }]}>
-              <Text style={styles.confirmEmoji}>{circle.categoryEmoji}</Text>
-            </View>
+            <CircleIcon
+              coverImage={circle.coverImage}
+              categoryEmoji={circle.categoryEmoji}
+              categoryColor={circle.categoryColor}
+              size={80}
+              borderRadius={24}
+              style={{ marginBottom: 18 }}
+            />
             <Text style={styles.confirmBadge}>YOU'RE IN ✦</Text>
             <Text style={styles.confirmName}>{circle.name}</Text>
             <TouchableOpacity
@@ -204,6 +217,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bodySemiBold,
     fontSize: 14, color: C.text, letterSpacing: -0.1,
   },
+  circleDesc: { fontFamily: Fonts.body, fontSize: 11, color: C.textTertiary, marginTop: 1, lineHeight: 15 },
   circleMeta: {
     fontFamily: Fonts.body,
     fontSize: 11, color: C.textTertiary, marginTop: 2,

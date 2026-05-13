@@ -68,11 +68,11 @@ function getTagsForCategory(category: string): VibeTag[] {
 // ─── Rating data ──────────────────────────────────────────────────────────────
 
 const RATINGS = [
-  { value: 1, emoji: '😬', label: 'Rough' },
-  { value: 2, emoji: '😐', label: 'Meh' },
-  { value: 3, emoji: '🙂', label: 'Good' },
-  { value: 4, emoji: '😄', label: 'Great' },
-  { value: 5, emoji: '🔥', label: 'Iconic' },
+  { value: 1, label: 'Rough' },
+  { value: 2, label: 'Meh' },
+  { value: 3, label: 'Good' },
+  { value: 4, label: 'Great' },
+  { value: 5, label: 'Iconic' },
 ];
 
 // ─── Shared components ────────────────────────────────────────────────────────
@@ -217,40 +217,31 @@ function Step2Photos({
   );
 }
 
-// ─── Animated rating emoji ────────────────────────────────────────────────────
+// ─── Star rating widget ────────────────────────────────────────────────────────
 
-function RatingEmoji({
-  rating: r,
-  selected: sel,
-  onPress,
-}: {
-  rating: { value: number; emoji: string; label: string };
-  selected: boolean;
-  onPress: () => void;
-}) {
+function AnimatedStar({ s, value, size, onChange }: { s: number; value: number; size: number; onChange: (v: number) => void }) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
   function handlePress() {
-    scale.value = withSpring(1.35, { damping: 8, stiffness: 280 }, () => {
-      scale.value = withSpring(sel ? 1 : 1.15, { damping: 12, stiffness: 300 });
+    scale.value = withSpring(1.3, { damping: 8, stiffness: 300 }, () => {
+      scale.value = withSpring(1, { damping: 12, stiffness: 250 });
     });
-    onPress();
+    onChange(s);
   }
-
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={styles.ratingItem}>
-      <Animated.Text
-        style={[
-          styles.ratingEmoji,
-          animStyle,
-          sel ? { fontSize: 44, opacity: 1 } : { fontSize: 32, opacity: 0.3 },
-        ]}
-      >
-        {r.emoji}
-      </Animated.Text>
-      {sel && <Text style={styles.ratingLabel}>{r.label}</Text>}
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+      <Animated.Text style={[{ fontSize: size, color: s <= value ? C.primary : '#D8D0C8' }, animStyle]}>★</Animated.Text>
     </TouchableOpacity>
+  );
+}
+
+function StarRating({ value, onChange, size = 36 }: { value: number; onChange: (v: number) => void; size?: number }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      {[1, 2, 3, 4, 5].map(s => (
+        <AnimatedStar key={s} s={s} value={value} size={size} onChange={onChange} />
+      ))}
+    </View>
   );
 }
 
@@ -269,20 +260,18 @@ function Step3Rating({
   setVenueRating: (v: number) => void;
   placeName: string | null;
 }) {
+  const ratingLabel = RATINGS.find(r => r.value === rating)?.label;
   return (
     <ScrollView style={styles.stepScroll} contentContainerStyle={styles.stepContent} showsVerticalScrollIndicator={false}>
       <Text style={styles.stepHeading}>Would you do this again?</Text>
+      <Text style={styles.stepSub}>Rate the overall vibe</Text>
 
       <View style={styles.ratingRow}>
-        {RATINGS.map(r => (
-          <RatingEmoji
-            key={r.value}
-            rating={r}
-            selected={rating === r.value}
-            onPress={() => setRating(r.value)}
-          />
-        ))}
+        <StarRating value={rating} onChange={setRating} size={40} />
       </View>
+      {ratingLabel ? (
+        <Text style={styles.ratingLabel}>{ratingLabel}</Text>
+      ) : null}
 
       {placeName && (
         <View style={styles.venueCard}>
@@ -399,7 +388,7 @@ function PhotoManagerScreen({
   saving: boolean;
 }) {
   const atLimit = photos.length >= MAX_PHOTOS;
-  const ratingEmoji = RATINGS.find(r => r.value === rating)?.emoji ?? '';
+  const ratingLabel = RATINGS.find(r => r.value === rating)?.label ?? '';
   const tagLine = selectedTags.slice(0, 3).join(' · ');
 
   return (
@@ -408,7 +397,7 @@ function PhotoManagerScreen({
 
       {/* Summary of existing rating/vibe */}
       <View style={styles.summaryRow}>
-        {rating > 0 && <Text style={styles.summaryRating}>{ratingEmoji} {RATINGS.find(r => r.value === rating)?.label}</Text>}
+        {rating > 0 && <Text style={styles.summaryRating}>{'★'.repeat(rating)} {ratingLabel}</Text>}
         {tagLine.length > 0 && <Text style={styles.summaryTags}>{tagLine}</Text>}
       </View>
 
@@ -885,24 +874,17 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   ratingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    marginTop: 20,
-    marginBottom: 32,
-  },
-  ratingItem: {
     alignItems: 'center',
-    minWidth: 44,
-  },
-  ratingEmoji: {
-    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 12,
   },
   ratingLabel: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 12,
+    fontSize: 15,
     color: C.primary,
-    marginTop: 6,
+    textAlign: 'center',
+    marginBottom: 24,
+    minHeight: 20,
   },
   venueCard: {
     backgroundColor: C.surfaceAlt,

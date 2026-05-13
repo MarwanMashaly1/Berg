@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
@@ -15,6 +16,9 @@ export default function Step3() {
   const [answers, setAnswers] = useState(['', '', '']);
   const [saving, setSaving] = useState(false);
   const insets = useSafeAreaInsets();
+
+  // Reset loading state if user navigates back to this screen
+  useFocusEffect(useCallback(() => { setSaving(false); }, []));
 
   function setAnswer(i: number, val: string) {
     setAnswers((prev) => { const next = [...prev]; next[i] = val; return next; });

@@ -110,17 +110,17 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionLabel}>LEGAL</Text>
         <View style={styles.card}>
-          <TouchableOpacity style={styles.row} onPress={() => Linking.openURL('https://berg.app/privacy')}>
+          <TouchableOpacity style={styles.row} onPress={() => Linking.openURL('https://joinberg.app/privacy')}>
             <MaterialIcons name="privacy-tip" size={18} color={C.textSecondary} />
             <Text style={[styles.label, { flex: 1 }]}>Privacy Policy</Text>
             <MaterialIcons name="open-in-new" size={14} color={C.textTertiary} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.row, styles.border]} onPress={() => Linking.openURL('https://berg.app/terms')}>
+          <TouchableOpacity style={[styles.row, styles.border]} onPress={() => Linking.openURL('https://joinberg.app/terms')}>
             <MaterialIcons name="description" size={18} color={C.textSecondary} />
             <Text style={[styles.label, { flex: 1 }]}>Terms of Service</Text>
             <MaterialIcons name="open-in-new" size={14} color={C.textTertiary} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.row, styles.border, styles.last]} onPress={() => Linking.openURL('https://berg.app/delete-data')}>
+          <TouchableOpacity style={[styles.row, styles.border, styles.last]} onPress={() => Linking.openURL('https://joinberg.app/delete-data')}>
             <MaterialIcons name="manage-accounts" size={18} color={C.textSecondary} />
             <Text style={[styles.label, { flex: 1 }]}>Request data deletion</Text>
             <MaterialIcons name="open-in-new" size={14} color={C.textTertiary} />

@@ -11,8 +11,12 @@ import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { BergSheet } from '../../../components/ui/BergSheet';
+import { CircularCropModal } from '../../../components/ui/CircularCropModal';
 import { patchUser, checkUsername } from '../../../lib/api';
-import { pickAndUploadAvatar, takeAndUploadAvatar } from '../../../lib/avatar';
+import {
+  pickImageFromLibrary, takePhotoFromCamera,
+  uploadAvatarFromUri, PickedImage,
+} from '../../../lib/avatar';
 
 const C = Colors.light;
 
@@ -23,6 +27,7 @@ export default function Step1() {
   const [usernameError, setUsernameError] = useState('');
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>((session?.user?.image ?? null) as string | null);
+  const [pendingCrop, setPendingCrop] = useState<PickedImage | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -48,29 +53,26 @@ export default function Step1() {
   }
 
   async function handleLibrary() {
-    setUploading(true);
-    setError('');
-    try {
-      const url = await pickAndUploadAvatar();
-      if (url) setAvatarUri(url);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? String(err.message) : String(err);
-      console.error('[step1:library] raw err:', JSON.stringify(err, Object.getOwnPropertyNames(err instanceof Error ? err : {})));
-      setError(msg || 'Upload failed. Please try again.');
-    } finally {
-      setUploading(false);
-    }
+    setSheetVisible(false);
+    const picked = await pickImageFromLibrary();
+    if (picked) setPendingCrop(picked);
   }
 
   async function handleCamera() {
+    setSheetVisible(false);
+    const picked = await takePhotoFromCamera();
+    if (picked) setPendingCrop(picked);
+  }
+
+  async function handleCropConfirm(croppedUri: string) {
+    setPendingCrop(null);
     setUploading(true);
     setError('');
     try {
-      const url = await takeAndUploadAvatar();
+      const url = await uploadAvatarFromUri(croppedUri);
       if (url) setAvatarUri(url);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? String(err.message) : String(err);
-      console.error('[step1:camera] raw err:', JSON.stringify(err, Object.getOwnPropertyNames(err instanceof Error ? err : {})));
+      const msg = err instanceof Error ? err.message : String(err);
       setError(msg || 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
@@ -106,26 +108,25 @@ export default function Step1() {
     : '?';
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: C.backgroundWarm }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          flexGrow: 1,
-          paddingHorizontal: 28,
-          paddingTop: insets.top + 20,
-          paddingBottom: insets.bottom + 24,
-        }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: C.backgroundWarm }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.header}>
-          <OnboardingProgress currentStep={1} />
-        </View>
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: 28,
+            paddingTop: insets.top + 20,
+            paddingBottom: insets.bottom + 24,
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <OnboardingProgress currentStep={1} />
+          </View>
 
-        <View style={styles.content}>
           <Text style={styles.heading}>Let's set up{'\n'}your profile</Text>
           <View style={styles.rule} />
           <Text style={styles.sub}>Add a photo and tell us your name.</Text>
@@ -144,14 +145,10 @@ export default function Step1() {
                 <Text style={styles.avatarInitials}>{initials}</Text>
               </View>
             )}
-
-            {/* Camera badge */}
             <View style={styles.cameraBadge}>
-              {/* Camera icon drawn with views */}
               <View style={styles.cameraBody} />
               <View style={styles.cameraLens} />
             </View>
-
             {uploading && (
               <View style={styles.uploadingOverlay}>
                 <Text style={styles.uploadingText}>Uploading…</Text>
@@ -181,19 +178,19 @@ export default function Step1() {
             onSubmitEditing={handleNext}
             containerStyle={{ marginTop: 12 }}
           />
-        </View>
 
-        <Button
-          label="Next"
-          onPress={handleNext}
-          loading={loading}
-          disabled={!name.trim() || uploading}
-          fullWidth
-          size="lg"
-          style={styles.btn}
-          textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }}
-        />
-      </ScrollView>
+          <Button
+            label="Next"
+            onPress={handleNext}
+            loading={loading}
+            disabled={!name.trim() || uploading}
+            fullWidth
+            size="lg"
+            style={styles.btn}
+            textStyle={{ color: '#fff', fontFamily: Fonts.bodySemiBold }}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <BergSheet
         visible={sheetVisible}
@@ -204,13 +201,23 @@ export default function Step1() {
           { label: 'Choose from library', onPress: handleLibrary },
         ]}
       />
-    </KeyboardAvoidingView>
+
+      {pendingCrop && (
+        <CircularCropModal
+          visible
+          imageUri={pendingCrop.uri}
+          imageWidth={pendingCrop.width}
+          imageHeight={pendingCrop.height}
+          onConfirm={handleCropConfirm}
+          onCancel={() => setPendingCrop(null)}
+        />
+      )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   header: { marginBottom: 28 },
-  content: { flex: 1, justifyContent: 'center', paddingBottom: 32 },
   heading: {
     fontFamily: Fonts.heading,
     fontSize: 36,
@@ -223,7 +230,6 @@ const styles = StyleSheet.create({
   rule: { width: 32, height: 2, backgroundColor: C.primary, borderRadius: 2, marginBottom: 14 },
   sub: { fontFamily: Fonts.body, fontSize: 15, color: C.textSecondary, lineHeight: 22, marginBottom: 28 },
 
-  // Avatar
   avatarWrap: {
     alignSelf: 'center',
     marginBottom: 8,
@@ -257,7 +263,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Camera icon
   cameraBody: {
     width: 12,
     height: 9,
@@ -293,5 +298,5 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  btn: { backgroundColor: C.text, borderRadius: 14, marginTop: 'auto' },
+  btn: { backgroundColor: C.text, borderRadius: 14, marginTop: 32 },
 });

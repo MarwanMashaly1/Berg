@@ -11,6 +11,7 @@ import { Avatar } from '../../../../components/ui/Avatar';
 import {
   getProfileConnections, getInviteLink,
   acceptConnection, declineConnection, cancelConnection,
+  getOrCreateDirectChat,
   ProfileConnection, PendingConnection, SentConnection, InviteLink,
 } from '../../../../lib/api';
 
@@ -34,6 +35,7 @@ export default function ConnectionsScreen() {
   const [sentExpanded, setSentExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actioning, setActioning]   = useState<string | null>(null);
+  const [messaging, setMessaging]   = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const [c, il] = await Promise.allSettled([getProfileConnections(), getInviteLink()]);
@@ -67,6 +69,22 @@ export default function ConnectionsScreen() {
     await declineConnection(userId);
     setPending((prev) => prev.filter((p) => p.id !== userId));
     setActioning(null);
+  }
+
+  async function handleMessage(conn: ProfileConnection) {
+    if (messaging === conn.id) return;
+    setMessaging(conn.id);
+    try {
+      const { id: chatId } = await getOrCreateDirectChat(conn.id);
+      router.push({
+        pathname: '/(app)/(tabs)/chat/[id]',
+        params: { id: chatId, type: 'direct', name: conn.name ?? 'Chat' },
+      } as any);
+    } catch (e: any) {
+      Alert.alert('Could not open chat', e?.message ?? 'Please try again.');
+    } finally {
+      setMessaging(null);
+    }
   }
 
   async function handleCancel(userId: string, name: string | null) {
@@ -227,7 +245,14 @@ export default function ConnectionsScreen() {
                       <Text style={styles.rowMeta}>{avail.label}</Text>
                     )}
                   </View>
-                  <MaterialIcons name="chevron-right" size={20} color={C.textTertiary} />
+                  <TouchableOpacity
+                    style={styles.msgBtn}
+                    onPress={() => handleMessage(conn)}
+                    disabled={messaging === conn.id}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <MaterialIcons name="chat-bubble-outline" size={18} color={messaging === conn.id ? C.textTertiary : C.primary} />
+                  </TouchableOpacity>
                 </TouchableOpacity>
               );
             })
@@ -525,5 +550,13 @@ const styles = StyleSheet.create({
     color: C.textSecondary,
     textAlign: 'center',
     lineHeight: 19,
+  },
+  msgBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,107,53,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -1,6 +1,12 @@
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import { Tabs, router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { authClient } from '../../../lib/auth';
 import { Colors } from '../../../constants/theme';
 import { IconSymbol } from '../../../components/ui/icon-symbol';
@@ -16,12 +22,21 @@ function TabIcon({
   name: React.ComponentProps<typeof IconSymbol>['name'];
   active: boolean;
 }) {
+  const scale = useSharedValue(active ? 1 : 0.85);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(active ? 1 : 0.85, { damping: 15, stiffness: 300 }) }],
+  }));
+
   return (
-    <IconSymbol
-      name={name}
-      size={22}
-      color={active ? C.primary : C.tabIconDefault}
-    />
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View style={animStyle}>
+        <IconSymbol
+          name={name}
+          size={22}
+          color={active ? C.primary : C.tabIconDefault}
+        />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -80,6 +95,7 @@ export default function TabsLayout() {
         name="discovery"
         options={{
           title: 'Discover',
+          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="sparkles" active={focused} />
           ),
@@ -89,6 +105,7 @@ export default function TabsLayout() {
         name="motives"
         options={{
           title: 'Motives',
+          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="calendar" active={focused} />
           ),
@@ -98,6 +115,7 @@ export default function TabsLayout() {
         name="chat"
         options={{
           title: 'Chat',
+          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="message" active={focused} />
           ),
@@ -107,6 +125,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="person.circle" active={focused} />
           ),

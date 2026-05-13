@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Colors, Fonts } from '../../../constants/theme';
 import { CircleSuggestion, joinCircle } from '../../../lib/api';
+import { CircleIcon } from '../../ui/CircleIcon';
 import { SkeletonCircleRow } from '../../ui/Skeleton';
 
 const C = Colors.light;
@@ -71,9 +72,13 @@ export function CirclesSection({ circles, loading }: Props) {
           const isJoining = joiningIds.has(circle.id);
           return (
             <View key={circle.id} style={styles.row}>
-              <View style={[styles.icon, { backgroundColor: circle.categoryColor }]}>
-                <Text style={styles.iconText}>{circle.categoryEmoji}</Text>
-              </View>
+              <CircleIcon
+                coverImage={circle.coverImage}
+                categoryEmoji={circle.categoryEmoji}
+                categoryColor={circle.categoryColor}
+                size={44}
+                borderRadius={14}
+              />
               <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={1}>{circle.name}</Text>
                 <Text style={styles.meta}>
@@ -120,9 +125,14 @@ export function CirclesSection({ circles, loading }: Props) {
         <Modal visible animationType="fade" transparent statusBarTranslucent>
           <View style={styles.overlay}>
             <View style={styles.confirmContent}>
-              <View style={[styles.confirmIcon, { backgroundColor: joinedCircle.categoryColor }]}>
-                <Text style={styles.confirmIconText}>{joinedCircle.categoryEmoji}</Text>
-              </View>
+              <CircleIcon
+                coverImage={joinedCircle.coverImage}
+                categoryEmoji={joinedCircle.categoryEmoji}
+                categoryColor={joinedCircle.categoryColor}
+                size={80}
+                borderRadius={24}
+                style={{ marginBottom: 18 }}
+              />
               <Text style={styles.confirmBadge}>YOU'RE IN ✦</Text>
               <Text style={styles.confirmName}>{joinedCircle.name}</Text>
               <Text style={styles.confirmCount}>{joinResult.memberCount} members now in your circle</Text>

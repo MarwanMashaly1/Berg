@@ -14,9 +14,10 @@ import { Colors, Fonts } from '../../../../constants/theme';
 import { Avatar } from '../../../../components/ui/Avatar';
 import {
   getProfileStats, getProfileConnections, getProfileCircles, getInviteLink,
-  patchUser, requestConnection, getPublicUser,
+  patchUser, requestConnection, getPublicUser, getUserMe,
   ProfileStats, ProfileConnection, ProfileCircle, InviteLink,
 } from '../../../../lib/api';
+import { CircleIcon } from '../../../../components/ui/CircleIcon';
 
 const C = Colors.light;
 const AVAIL_OPTIONS = [
@@ -47,6 +48,7 @@ export default function ProfileScreen() {
   const scanCooldown = useRef(false);
   const [showAvailPicker, setShowAvailPicker] = useState(false);
   const [availability, setAvailability] = useState<string>(user?.availabilityStatus ?? 'down_to_hang');
+  const [profileData, setProfileData] = useState<any>(null);
 
   const loadAll = useCallback(async () => {
     const [s, c, ci, il] = await Promise.allSettled([
@@ -59,8 +61,14 @@ export default function ProfileScreen() {
     }
     if (ci.status === 'fulfilled') setCircles(ci.value.joined.slice(0, 3));
     if (il.status === 'fulfilled') setInviteLink(il.value);
+    const pd = await getUserMe().catch(() => null);
+    if (pd?.user) setProfileData(pd.user);
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (profileData?.availabilityStatus) setAvailability(profileData.availabilityStatus);
+  }, [profileData?.availabilityStatus]);
 
   // Initial load — wait for session to avoid 401
   useEffect(() => { if (session) loadAll(); }, [session, loadAll]);
@@ -92,7 +100,12 @@ export default function ProfileScreen() {
     scanCooldown.current = true;
     try {
       const { user: scannedUser } = await getPublicUser(scannedUserId);
-      setScanResult({ userId: scannedUserId, name: scannedUser.name, image: scannedUser.image });
+      if (scannedUser.connectionStatus === 'confirmed') {
+        setScanMessage(`You're already connected with ${scannedUser.name ?? 'this person'}!`);
+        setScanDone('success');
+      } else {
+        setScanResult({ userId: scannedUserId, name: scannedUser.name, image: scannedUser.image });
+      }
     } catch {
       scanCooldown.current = false;
     }
@@ -114,9 +127,9 @@ export default function ProfileScreen() {
   }
 
   const currentAvail = AVAIL_OPTIONS.find(o => o.value === availability) ?? AVAIL_OPTIONS[0];
-  const displayName = user?.displayName ?? user?.name ?? 'Your Name';
-  const username = user?.username;
-  const bio = user?.bio;
+  const displayName = profileData?.displayName ?? profileData?.name ?? user?.name ?? 'Your Name';
+  const username = profileData?.username ?? (user as any)?.username;
+  const bio = profileData?.bio ?? (user as any)?.bio;
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -248,7 +261,12 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.avatarStrip}>
               {connections.map((conn, i) => (
-                <View key={conn.id} style={[styles.connAvatar, i > 0 && { marginLeft: -6 }]}>
+                <TouchableOpacity
+                  key={conn.id}
+                  style={[styles.connAvatar, i > 0 && { marginLeft: -6 }]}
+                  onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}
+                  activeOpacity={0.75}
+                >
                   <Avatar
                     name={conn.name}
                     userId={conn.id}
@@ -257,14 +275,18 @@ export default function ProfileScreen() {
                     style={styles.connAvatarCircle}
                   />
                   <Text style={styles.connName}>{conn.name?.split(' ')[0]}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
               {(stats?.connections ?? 0) > 4 && (
-                <View style={[styles.connAvatar, { marginLeft: -6 }]}>
+                <TouchableOpacity
+                  style={[styles.connAvatar, { marginLeft: -6 }]}
+                  onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}
+                  activeOpacity={0.75}
+                >
                   <View style={[styles.connAvatarCircle, { backgroundColor: '#F0ECE8' }]}>
                     <Text style={styles.connMore}>+{(stats?.connections ?? 0) - 4}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
           )}
@@ -293,7 +315,13 @@ export default function ProfileScreen() {
             <View style={styles.circlesPills}>
               {circles.map(ci => (
                 <View key={ci.id} style={[styles.circlePill, { backgroundColor: C.surface, borderColor: ci.categoryColor }]}>
-                  <Text style={styles.circlePillEmoji}>{ci.categoryEmoji}</Text>
+                  <CircleIcon
+                    coverImage={ci.coverImage}
+                    categoryEmoji={ci.categoryEmoji}
+                    categoryColor={ci.categoryColor}
+                    size={20}
+                    borderRadius={6}
+                  />
                   <Text style={styles.circlePillName}>{ci.name}</Text>
                 </View>
               ))}

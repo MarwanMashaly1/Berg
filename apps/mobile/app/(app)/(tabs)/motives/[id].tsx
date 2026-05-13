@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Pressable,
+  Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -344,25 +345,76 @@ export default function MotiveDetailScreen() {
         {!isPast && (
           <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.rsvpSection}>
             {isOrganiser ? (
-              <View style={styles.organiserRow}>
+              <>
+                {/* Organizer RSVP — they can step back without cancelling */}
                 <TouchableOpacity
-                  onPress={() => router.push(`/(app)/(tabs)/motives/${motive.id}/edit` as any)}
-                  style={styles.organiserBtn}
+                  onPress={() => handleRsvp('going')}
+                  disabled={rsvpLoading}
+                  style={[
+                    styles.goingBtn,
+                    myRsvp === 'going' && styles.goingBtnActive,
+                    rsvpLoading && { opacity: 0.6 },
+                  ]}
+                  activeOpacity={0.85}
                 >
-                  <Text style={styles.organiserBtnText}>Edit motive</Text>
+                  <Text style={[styles.goingBtnText, myRsvp === 'going' && styles.goingBtnTextActive]}>
+                    {myRsvp === 'going' ? 'Going ✓' : "I'm going"}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      await apiFetch(`/api/motives/${id}`, { method: 'DELETE' });
-                      router.back();
-                    } catch {}
-                  }}
-                  style={styles.cancelBtn}
-                >
-                  <Text style={styles.cancelBtnText}>Cancel motive</Text>
-                </TouchableOpacity>
-              </View>
+                <View style={styles.maybeRow}>
+                  <TouchableOpacity
+                    onPress={() => handleRsvp('maybe')}
+                    disabled={rsvpLoading}
+                    style={[styles.maybeBtn, myRsvp === 'maybe' && styles.maybeBtnActive]}
+                  >
+                    <Text style={[styles.maybeBtnText, myRsvp === 'maybe' && styles.maybeBtnTextActive]}>Maybe</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleRsvp('declined')}
+                    disabled={rsvpLoading}
+                    style={[styles.maybeBtn, myRsvp === 'declined' && styles.maybeBtnActive]}
+                  >
+                    <Text style={[styles.maybeBtnText, myRsvp === 'declined' && styles.maybeBtnTextActive]}>
+                      Can&apos;t make it
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {/* Organizer admin actions */}
+                <View style={[styles.organiserRow, { marginTop: 8 }]}>
+                  <TouchableOpacity
+                    onPress={() => router.push(`/(app)/(tabs)/motives/${motive.id}/edit` as any)}
+                    style={styles.organiserBtn}
+                  >
+                    <Text style={styles.organiserBtnText}>Edit motive</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      Alert.alert(
+                        'Cancel motive',
+                        'This will cancel the motive and notify all attendees.',
+                        [
+                          { text: 'Keep it', style: 'cancel' },
+                          {
+                            text: 'Cancel motive',
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                await apiFetch(`/api/motives/${id}`, { method: 'DELETE' });
+                                router.back();
+                              } catch {
+                                Alert.alert('Error', 'Could not cancel motive. Please try again.');
+                              }
+                            },
+                          },
+                        ],
+                      );
+                    }}
+                    style={styles.cancelBtn}
+                  >
+                    <Text style={styles.cancelBtnText}>Cancel motive</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
             ) : (
               <>
                 <TouchableOpacity

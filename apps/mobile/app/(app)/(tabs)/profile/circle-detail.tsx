@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  RefreshControl, Image, Alert, Share, Dimensions,
+  RefreshControl, Image, Alert, Share, Dimensions, ImageBackground,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -89,6 +89,24 @@ export default function CircleDetailScreen() {
     }
   }
 
+  async function handleReject(userId: string, name: string | null) {
+    if (!circle) return;
+    Alert.alert('Reject request', `Reject ${name ?? 'this person'}'s request to join?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject', style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeMember(circle.id, userId);
+            await load();
+          } catch (e: any) {
+            Alert.alert('Error', e.message ?? 'Could not reject request');
+          }
+        },
+      },
+    ]);
+  }
+
   async function handleRemove(userId: string, name: string | null) {
     if (!circle) return;
     Alert.alert('Remove member', `Remove ${name ?? 'this member'} from the circle?`, [
@@ -163,12 +181,26 @@ export default function CircleDetailScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />}
       >
         {/* Hero */}
-        <View style={[styles.hero, { backgroundColor: circle.categoryColor }]}>
-          <Text style={styles.heroEmoji}>{circle.categoryEmoji}</Text>
-          <Text style={styles.heroName}>{circle.name}</Text>
-          {circle.description ? <Text style={styles.heroDesc}>{circle.description}</Text> : null}
-          <Text style={styles.heroMeta}>{memberCount} member{memberCount !== 1 ? 's' : ''}</Text>
-        </View>
+        {circle.coverImage ? (
+          <ImageBackground
+            source={{ uri: circle.coverImage }}
+            style={styles.heroCover}
+            imageStyle={{ borderRadius: 20 }}
+          >
+            <View style={styles.heroCoverOverlay}>
+              <Text style={styles.heroName}>{circle.name}</Text>
+              {circle.description ? <Text style={[styles.heroDesc, { color: 'rgba(255,255,255,0.75)' }]}>{circle.description}</Text> : null}
+              <Text style={[styles.heroMeta, { color: 'rgba(255,255,255,0.6)' }]}>{memberCount} member{memberCount !== 1 ? 's' : ''}</Text>
+            </View>
+          </ImageBackground>
+        ) : (
+          <View style={[styles.hero, { backgroundColor: circle.categoryColor }]}>
+            <Text style={styles.heroEmoji}>{circle.categoryEmoji}</Text>
+            <Text style={styles.heroName}>{circle.name}</Text>
+            {circle.description ? <Text style={styles.heroDesc}>{circle.description}</Text> : null}
+            <Text style={styles.heroMeta}>{memberCount} member{memberCount !== 1 ? 's' : ''}</Text>
+          </View>
+        )}
 
         {/* Join / Status bar */}
         {canJoin && (
@@ -225,7 +257,7 @@ export default function CircleDetailScreen() {
                   <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(m.id)}>
                     <Text style={styles.approveBtnText}>Approve</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleRemove(m.id, m.name)}>
+                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(m.id, m.name)}>
                     <MaterialIcons name="close" size={14} color={C.textSecondary} />
                   </TouchableOpacity>
                 </View>
@@ -264,6 +296,14 @@ const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 14, borderRadius: 20, padding: 24,
     alignItems: 'center', marginBottom: 16,
+  },
+  heroCover: {
+    marginHorizontal: 14, borderRadius: 20, height: 180, marginBottom: 16,
+    overflow: 'hidden', justifyContent: 'flex-end',
+  },
+  heroCoverOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.42)', padding: 18,
+    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
   },
   heroEmoji: { fontSize: 48, marginBottom: 8 },
   heroName: { fontFamily: Fonts.heading, fontSize: 22, color: C.text, textAlign: 'center', marginBottom: 4, fontStyle: 'italic' },

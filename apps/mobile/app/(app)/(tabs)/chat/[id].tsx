@@ -57,20 +57,28 @@ type OptimisticMsg = {
 };
 
 type ListItem =
-  | { type: 'message'; data: ChatMessage }
+  | { type: 'message'; data: ChatMessage; showTime: boolean; showSenderName: boolean }
   | { type: 'separator'; date: string; key: string }
   | { type: 'optimistic'; data: OptimisticMsg };
 
 function buildListItems(msgs: ChatMessage[], optimistic: OptimisticMsg[]): ListItem[] {
   const items: ListItem[] = [];
   let lastDay: string | null = null;
-  for (const msg of msgs) {
+  for (let i = 0; i < msgs.length; i++) {
+    const msg = msgs[i];
     const day = new Date(msg.createdAt).toDateString();
     if (day !== lastDay) {
       items.push({ type: 'separator', date: msg.createdAt, key: `sep-${day}` });
       lastDay = day;
     }
-    items.push({ type: 'message', data: msg });
+    const prev = msgs[i - 1];
+    const next = msgs[i + 1];
+    const GAP = 60_000;
+    const sameAsPrev = !!prev && prev.senderId === msg.senderId &&
+      new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() < GAP;
+    const sameAsNext = !!next && next.senderId === msg.senderId &&
+      new Date(next.createdAt).getTime() - new Date(msg.createdAt).getTime() < GAP;
+    items.push({ type: 'message', data: msg, showSenderName: !sameAsPrev, showTime: !sameAsNext });
   }
   for (const msg of optimistic) {
     items.push({ type: 'optimistic', data: msg });
@@ -298,7 +306,9 @@ const rm = StyleSheet.create({
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
+function MessageBubble({ msg, isMe, showTime, showSenderName }: {
+  msg: ChatMessage; isMe: boolean; showTime: boolean; showSenderName: boolean;
+}) {
   const { width: screenWidth } = useWindowDimensions();
   const mediaWidth = Math.min(220, screenWidth * 0.58);
   const mediaHeight = Math.round(mediaWidth * (180 / 220));
@@ -313,11 +323,14 @@ function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
           <Avatar
             name={msg.senderName}
             userId={msg.senderId}
+            uri={msg.senderImage ?? undefined}
             size="xs"
-            style={{ marginRight: 6, alignSelf: 'flex-end' }}
+            style={{ marginRight: 6, alignSelf: 'flex-end', opacity: showTime ? 1 : 0 }}
           />
           <View style={styles.bubbleContent}>
-            <Text style={styles.senderName}>{msg.senderName?.split(' ')[0] ?? 'Someone'}</Text>
+            {showSenderName && (
+              <Text style={styles.senderName}>{msg.senderName?.split(' ')[0] ?? 'Someone'}</Text>
+            )}
             {isMedia ? (
               <View style={[styles.mediaBubble, styles.mediaBubbleThem]}>
                 <Image
@@ -334,9 +347,11 @@ function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
                 </Text>
               </View>
             )}
-            <Text style={[styles.timeLabel, styles.timeLabelThem]}>
-              {formatTime(msg.createdAt)}
-            </Text>
+            {showTime && (
+              <Text style={[styles.timeLabel, styles.timeLabelThem]}>
+                {formatTime(msg.createdAt)}
+              </Text>
+            )}
           </View>
         </View>
       )}
@@ -358,9 +373,11 @@ function MessageBubble({ msg, isMe }: { msg: ChatMessage; isMe: boolean }) {
               </Text>
             </View>
           )}
-          <Text style={[styles.timeLabel, styles.timeLabelMe]}>
-            {formatTime(msg.createdAt)}
-          </Text>
+          {showTime && (
+            <Text style={[styles.timeLabel, styles.timeLabelMe]}>
+              {formatTime(msg.createdAt)}
+            </Text>
+          )}
         </>
       )}
     </View>
@@ -449,6 +466,7 @@ export default function ChatRoomScreen() {
     try {
       const data = await getChatMessages(chatId);
       setMessages(data.messages);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -470,7 +488,13 @@ export default function ChatRoomScreen() {
         channelRef.current.subscribe();
       }
     }
-  }, [loadHistory]));
+    return () => {
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        channelRef.current?.track({ userId: myId, name: myName, typing: false });
+      }
+    };
+  }, [loadHistory, myId, myName]));
 
   // ── Realtime ────────────────────────────────────────────────────────────────
 
@@ -520,9 +544,15 @@ export default function ChatRoomScreen() {
       setTypingNames(typers);
     });
 
+    let wasSubscribed = false;
     channel.subscribe(async (status: string) => {
       if (status === 'SUBSCRIBED') {
         await channel.track({ userId: myId, name: myName, typing: false });
+        if (wasSubscribed) {
+          // Channel reconnected after a drop — reload to catch missed messages
+          loadHistory();
+        }
+        wasSubscribed = true;
       }
     });
 
@@ -538,31 +568,40 @@ export default function ChatRoomScreen() {
 
   function handleTextChange(val: string) {
     setText(val);
-    if (!isTypingRef.current && val.length > 0) { isTypingRef.current = true; broadcastTyping(true); }
+    if (val.length === 0) {
+      if (isTypingRef.current) { isTypingRef.current = false; broadcastTyping(false); }
+      if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
+      return;
+    }
+    if (!isTypingRef.current) { isTypingRef.current = true; broadcastTyping(true); }
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => { isTypingRef.current = false; broadcastTyping(false); }, 2000);
   }
 
   // ── Send text ───────────────────────────────────────────────────────────────
 
-  async function trySend(content: string, localId?: string) {
+  async function trySend(content: string, type: 'text' | 'image' | 'gif' = 'text', localId?: string) {
     if (!chatId) return;
     const id = localId ?? `local-${Date.now()}`;
-    setOptimistic(prev =>
-      localId
-        ? prev.map(m => m.localId === id ? { ...m, status: 'sending' } : m)
-        : [...prev, { localId: id, content, status: 'sending', createdAt: new Date().toISOString() }],
-    );
+    if (type === 'text') {
+      setOptimistic(prev =>
+        localId
+          ? prev.map(m => m.localId === id ? { ...m, status: 'sending' } : m)
+          : [...prev, { localId: id, content, status: 'sending', createdAt: new Date().toISOString() }],
+      );
+    }
     try {
-      const { message } = await sendMessage(chatId, content);
+      const { message } = await sendMessage(chatId, content, type);
       // Add real message immediately — don't depend on postgres_changes firing
       setMessages(prev => prev.some(m => m.id === message.id) ? prev : [...prev, message]);
-      setOptimistic(prev => prev.filter(m => m.localId !== id));
+      if (type === 'text') setOptimistic(prev => prev.filter(m => m.localId !== id));
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
       // Broadcast to other members so they get live updates without postgres_changes config
       channelRef.current?.send({ type: 'broadcast', event: 'new_message', payload: message });
     } catch {
-      setOptimistic(prev => prev.map(m => m.localId === id ? { ...m, status: 'failed' } : m));
+      if (type === 'text') {
+        setOptimistic(prev => prev.map(m => m.localId === id ? { ...m, status: 'failed' } : m));
+      }
     }
   }
 
@@ -581,7 +620,7 @@ export default function ChatRoomScreen() {
   }
 
   function handleRetry(msg: OptimisticMsg) {
-    trySend(msg.content, msg.localId);
+    trySend(msg.content, 'text', msg.localId);
   }
 
   // ── Send GIF ────────────────────────────────────────────────────────────────
@@ -589,8 +628,8 @@ export default function ChatRoomScreen() {
   async function handleSendGif(url: string) {
     if (!chatId) return;
     try {
-      await sendMessage(chatId, url);
-    } catch (e) {
+      await trySend(url, 'gif');
+    } catch {
       Alert.alert('Failed to send GIF');
     }
   }
@@ -628,7 +667,7 @@ export default function ChatRoomScreen() {
       if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
 
       // Send the permanent public URL as an image message
-      await sendMessage(chatId, publicUrl);
+      await trySend(publicUrl, 'image');
     } catch (e: any) {
       Alert.alert('Upload failed', e.message ?? 'Could not send image.');
     } finally {
@@ -728,7 +767,14 @@ export default function ChatRoomScreen() {
                   </TouchableOpacity>
                 );
               }
-              return <MessageBubble msg={item.data} isMe={item.data.senderId === myId} />;
+              return (
+                <MessageBubble
+                  msg={item.data}
+                  isMe={item.data.senderId === myId}
+                  showTime={item.showTime}
+                  showSenderName={item.showSenderName}
+                />
+              );
             }}
             contentContainerStyle={{ paddingVertical: 12, paddingHorizontal: 12 }}
             showsVerticalScrollIndicator={false}

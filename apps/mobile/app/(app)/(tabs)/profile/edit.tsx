@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, StyleSheet, Alert, Image, ActionSheetIOS,
@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authClient } from '../../../../lib/auth';
 import { Colors, Fonts } from '../../../../constants/theme';
-import { patchUser } from '../../../../lib/api';
+import { patchUser, getUserMe } from '../../../../lib/api';
 import { pickAndUploadAvatar, takeAndUploadAvatar } from '../../../../lib/avatar';
 
 const C = Colors.light;
@@ -30,6 +30,17 @@ export default function EditProfileScreen() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    getUserMe().then(({ user: u }) => {
+      if (!u) return;
+      setName(u.displayName ?? u.name ?? '');
+      setUsername(u.username ?? '');
+      setBio(u.bio ?? '');
+      setAvailability(u.availabilityStatus ?? 'down_to_hang');
+      if (u.image) setAvatarUri(u.image);
+    }).catch(() => {});
+  }, []);
 
   function showAvatarPicker() {
     if (Platform.OS === 'ios') {
