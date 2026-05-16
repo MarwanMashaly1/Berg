@@ -21,10 +21,8 @@ const config = {
     package: 'app.berg.social',
     googleServicesFile: './google-services.json',
     adaptiveIcon: {
-      backgroundColor: '#FF6B35',
-      foregroundImage: './assets/images/android-icon-foreground.png',
-      backgroundImage: './assets/images/android-icon-background.png',
-      monochromeImage: './assets/images/android-icon-monochrome.png',
+      foregroundImage: './assets/images/icon.png',
+      backgroundColor: '#100D0B',
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
@@ -78,16 +76,18 @@ const config = {
     [
       'expo-splash-screen',
       {
-        image: './assets/images/splash-icon.png',
-        imageWidth: 200,
+        image: './assets/images/icon.png',
+        imageWidth: 180,
         resizeMode: 'contain',
-        backgroundColor: '#F8F2E8',
+        backgroundColor: '#100D0B',
         dark: {
           backgroundColor: '#100D0B',
         },
       },
     ],
     'expo-localization',
+    'expo-secure-store',
+    'expo-web-browser',
     // Only include Sentry plugin in production — it adds an Xcode build phase that
     // requires sentry-cli, which can't resolve in pnpm monorepo on dev/preview builds.
     ...(IS_PRODUCTION

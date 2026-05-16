@@ -15,14 +15,16 @@
       "distribution": "internal",
       "env": {
         "EAS_BUILD_PROFILE": "preview",
-        "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com",
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EAS_BUILD_PROFILE": "production",
-        "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "SENTRY_ALLOW_FAILURE": "true"
       }
     }
   },
