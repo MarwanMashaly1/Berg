@@ -11,19 +11,17 @@ export default function AppLayout() {
   const everHadSession = useRef(false);
 
   useEffect(() => {
+    console.log('[app-layout] session:', !!session, '| isPending:', isPending, '| everHad:', everHadSession.current);
     if (session) {
       everHadSession.current = true;
       return;
     }
-    // Still loading — wait
     if (isPending) return;
-    // Already confirmed a session this mount — brief null between navigations
     if (everHadSession.current) return;
-    // Cookie in SecureStore means BetterAuth is still hydrating the atom.
-    // Don't redirect — it will resolve to a session within the next render cycle.
-    // (Timer-based grace periods fail on slow devices and cause this exact bug.)
     const storedCookie = SecureStore.getItem(SESSION_COOKIE_KEY);
+    console.log('[app-layout] no session, no pending, storedCookie:', !!storedCookie);
     if (storedCookie) return;
+    console.log('[app-layout] → redirecting to welcome');
     router.replace('/(auth)/welcome');
   }, [session, isPending]);
 

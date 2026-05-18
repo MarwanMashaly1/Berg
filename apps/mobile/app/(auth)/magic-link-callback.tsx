@@ -45,42 +45,49 @@ export default function MagicLinkCallbackScreen() {
 
   async function verifyAndLogin(t: string) {
     try {
-      // Server-side verification: server calls BetterAuth verify internally,
-      // captures the Set-Cookie from BetterAuth's 302 response (no redirect issues),
-      // and returns it here so we can store it in SecureStore directly.
+      console.log('[magic-link] verifyAndLogin start, token length:', t.length);
       const res = await fetch(`${API_URL}/api/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: t }),  // full 32-char token from URL or code lookup
+        body: JSON.stringify({ token: t }),
       });
 
-      if (!res.ok) {
-        throw new Error('Verification failed');
-      }
+      console.log('[magic-link] verify-code response status:', res.status);
+      if (!res.ok) throw new Error(`Verification failed: ${res.status}`);
 
       const data = await res.json() as { setCookie?: string; error?: string };
+      console.log('[magic-link] setCookie present:', !!data.setCookie, '| error:', data.error);
 
       if (!data.setCookie) throw new Error('No session cookie returned');
 
-      const prevCookie = SecureStore.getItem(COOKIE_STORAGE_KEY);
-      const cookieJson = getSetCookie(data.setCookie, prevCookie ?? undefined);
+      // Start fresh — passing '{}' prevents stale session_data from a previous login
+      // contaminating the new session via BetterAuth's cookieCache
+      const cookieJson = getSetCookie(data.setCookie, '{}');
+      console.log('[magic-link] cookieJson length:', cookieJson?.length);
       SecureStore.setItem(COOKIE_STORAGE_KEY, cookieJson);
 
+      // Trigger session atom to re-fetch so useSession() in all layouts updates
+      (authClient as any).$store.notify('$sessionSignal');
+
       const sessionResult = await authClient.getSession();
+      console.log('[magic-link] getSession result:', sessionResult.data ? 'HAS SESSION' : 'NO SESSION', '| error:', sessionResult.error);
       if (!sessionResult.data) throw new Error('Session not found after verify');
 
       const user = sessionResult.data.user as any;
+      console.log('[magic-link] user.id:', user.id, '| onboardingCompleted:', user.onboardingCompleted);
       identifyUser(user.id, { name: user.name, email: user.email });
 
       if (!user?.onboardingCompleted) {
         const step = parseInt(user?.onboardingStep ?? '0', 10);
         const nextStep = Math.min(step + 1, 6);
+        console.log('[magic-link] navigating to onboarding step', nextStep);
         router.replace(`/(app)/onboarding/step-${nextStep}` as any);
       } else {
+        console.log('[magic-link] navigating to discovery');
         router.replace('/(app)/(tabs)/discovery');
       }
     } catch (err) {
-      console.error('[callback] Verification error:', err);
+      console.error('[magic-link] Verification error:', err);
       router.replace({ pathname: '/(auth)/signup', params: { error: 'link_expired' } });
     }
   }

@@ -69,23 +69,46 @@ export default function MagicLinkSentScreen() {
       });
 
       const data = await res.json() as { setCookie?: string; error?: string };
+      console.log('[verify] res.ok:', res.ok, '| setCookie present:', !!data.setCookie, '| error:', data.error);
 
       if (!res.ok || !data.setCookie) {
         setError(data.error ?? 'Invalid or expired code. Request a new one.');
         return;
       }
 
-      // Step 2: store the session cookie
-      const prevCookie = SecureStore.getItem(COOKIE_KEY);
-      const cookieJson = getSetCookie(data.setCookie, prevCookie ?? undefined);
+      console.log('[verify] setCookie (first 80 chars):', data.setCookie.slice(0, 80));
+
+      // Step 2: store the session cookie — start fresh (no prevCookie) so stale
+      // session_data from a previous login doesn't get merged and override the new session.
+      // Use sync setItem so SecureStore.getItem (sync) can read it immediately.
+      const cookieJson = getSetCookie(data.setCookie, '{}');
       SecureStore.setItem(COOKIE_KEY, cookieJson);
 
-      // Step 3: call getSession() — this forces BetterAuth's atom to hydrate
-      // with the new session BEFORE we navigate into (app), so AppLayout's
-      // useSession() guard never sees a null session on mount.
+      // Step 3: signal the session atom to re-fetch with the new cookie.
+      // Without this, the atom stays null (authClient.getSession() via proxy doesn't update it).
+      (authClient as any).$store.notify('$sessionSignal');
+
+      // Step 4: call getSession() to get user data for routing (onboarding vs discovery)
       const sessionResult = await authClient.getSession();
+      console.log('[verify] sessionResult.data:', sessionResult.data ? 'HAS SESSION' : 'NULL', '| error:', sessionResult.error);
+
       if (!sessionResult.data) {
-        setError('Session could not be established. Please try again.');
+        // Retry once — native write may need a moment
+        await new Promise((r) => setTimeout(r, 300));
+        const retry = await authClient.getSession();
+        console.log('[verify] retry sessionResult.data:', retry.data ? 'HAS SESSION' : 'NULL');
+        if (!retry.data) {
+          setError('Session could not be established. Please try again.');
+          return;
+        }
+        const user = retry.data.user as any;
+        identifyUser(user.id, { name: user.name ?? '', email: user.email ?? '' });
+        if (!user?.onboardingCompleted) {
+          const step = parseInt(user?.onboardingStep ?? '0', 10);
+          router.replace(`/(app)/onboarding/step-${Math.min(step + 1, 6)}` as any);
+        } else {
+          router.replace('/(app)/(tabs)/discovery');
+        }
         return;
       }
 

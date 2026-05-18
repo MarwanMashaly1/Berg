@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { authClient } from './auth';
+import * as SecureStore from 'expo-secure-store';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,7 +42,8 @@ export async function apiFetch<T>(
   if (!headers['Content-Type'] && fetchOptions.body) headers['Content-Type'] = 'application/json';
 
   if (__DEV__) {
-    console.log('[apiFetch]', fetchOptions.method ?? 'GET', `${API_URL}${path}`, 'cookie:', cookies ? cookies.slice(0, 60) : 'none');
+    const rawStored = SecureStore.getItem('berg_cookie');
+    console.log('[apiFetch]', fetchOptions.method ?? 'GET', `${API_URL}${path}`, 'cookie:', cookies ? cookies.slice(0, 60) : 'none', '| raw:', rawStored ? rawStored.slice(0, 60) : 'NULL');
   }
 
   const response = await fetch(`${API_URL}${path}`, {

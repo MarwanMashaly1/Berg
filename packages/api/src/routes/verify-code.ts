@@ -61,6 +61,6 @@ verifyCodeRoutes.post('/', zValidator('json', schema), async (c) => {
     return c.json({ error: 'Verification failed -- token may be expired or already used' }, 400);
   }
 
-  console.log('[verify-code] Verified, returning set-cookie');
+  console.log('[verify-code] Verified, returning set-cookie (first 80):', setCookie.slice(0, 80));
   return c.json({ setCookie });
 });
