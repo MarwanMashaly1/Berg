@@ -114,6 +114,14 @@ app.route('/api/places', placesRoutes);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/admin', adminRoutes);
 
+// --- get-session debug logger -------------------------------------------------
+app.get('/api/auth/get-session', async (c, next) => {
+  const cookie = c.req.header('cookie');
+  console.log(`[get-session] cookie header present: ${!!cookie} | first 80: ${cookie?.slice(0, 80) ?? 'NONE'}`);
+  await next();
+  console.log(`[get-session] response status: ${c.res.status}`);
+});
+
 // --- Google OAuth callback debug logger --------------------------------------
 app.get('/api/auth/callback/google', async (c, next) => {
   const code = c.req.query('code');
