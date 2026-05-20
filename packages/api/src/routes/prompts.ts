@@ -119,71 +119,74 @@ promptRoutes.get('/:id/matches', async (c) => {
   const me = c.get('user')!;
   const promptId = c.req.param('id');
 
-  const [myResponse] = await db
-    .select()
-    .from(promptResponses)
-    .where(and(eq(promptResponses.userId, me.id), eq(promptResponses.promptId, promptId)))
-    .limit(1);
+  const result = await cache.wrap(
+    CK.promptMatches(promptId, me.id),
+    TTL.PROMPT_MATCHES,
+    async () => {
+      const [myResponse] = await db
+        .select()
+        .from(promptResponses)
+        .where(and(eq(promptResponses.userId, me.id), eq(promptResponses.promptId, promptId)))
+        .limit(1);
 
-  if (!myResponse || !myResponse.optionKey) {
-    return c.json({ state: 'not_answered', matches: [], adjacentMatches: [], totalCount: 0 });
-  }
+      if (!myResponse || !myResponse.optionKey) {
+        return { state: 'not_answered', matches: [], adjacentMatches: [], totalCount: 0 };
+      }
 
-  const matches = await db
-    .select({
-      userId: promptResponses.userId,
-      name: users.name,
-      avatarUrl: users.image,
-      optionKey: promptResponses.optionKey,
-      storyText: promptResponses.storyText,
-    })
-    .from(promptResponses)
-    .innerJoin(users, eq(users.id, promptResponses.userId))
-    .innerJoin(circles, and(
-      eq(circles.friendId, promptResponses.userId),
-      eq(circles.userId, me.id),
-      eq(circles.status, 'confirmed')
-    ))
-    .where(and(
-      eq(promptResponses.promptId, promptId),
-      eq(promptResponses.optionKey, myResponse.optionKey ?? '')
-    ))
-    .limit(20);
+      const matches = await db
+        .select({
+          userId: promptResponses.userId,
+          name: users.name,
+          avatarUrl: users.image,
+          optionKey: promptResponses.optionKey,
+          storyText: promptResponses.storyText,
+        })
+        .from(promptResponses)
+        .innerJoin(users, eq(users.id, promptResponses.userId))
+        .innerJoin(circles, and(
+          eq(circles.friendId, promptResponses.userId),
+          eq(circles.userId, me.id),
+          eq(circles.status, 'confirmed')
+        ))
+        .where(and(
+          eq(promptResponses.promptId, promptId),
+          eq(promptResponses.optionKey, myResponse.optionKey ?? '')
+        ))
+        .limit(20);
 
-  let adjacentMatches: typeof matches = [];
-  if (myResponse.optionIndex !== null && myResponse.optionIndex !== undefined) {
-    adjacentMatches = await db
-      .select({
-        userId: promptResponses.userId,
-        name: users.name,
-        avatarUrl: users.image,
-        optionKey: promptResponses.optionKey,
-        storyText: promptResponses.storyText,
-      })
-      .from(promptResponses)
-      .innerJoin(users, eq(users.id, promptResponses.userId))
-      .innerJoin(circles, and(
-        eq(circles.friendId, promptResponses.userId),
-        eq(circles.userId, me.id),
-        eq(circles.status, 'confirmed')
-      ))
-      .where(and(
-        eq(promptResponses.promptId, promptId),
-        sql`ABS(${promptResponses.optionIndex} - ${myResponse.optionIndex}) = 1`
-      ))
-      .limit(5);
-  }
+      let adjacentMatches: typeof matches = [];
+      if (myResponse.optionIndex !== null && myResponse.optionIndex !== undefined) {
+        adjacentMatches = await db
+          .select({
+            userId: promptResponses.userId,
+            name: users.name,
+            avatarUrl: users.image,
+            optionKey: promptResponses.optionKey,
+            storyText: promptResponses.storyText,
+          })
+          .from(promptResponses)
+          .innerJoin(users, eq(users.id, promptResponses.userId))
+          .innerJoin(circles, and(
+            eq(circles.friendId, promptResponses.userId),
+            eq(circles.userId, me.id),
+            eq(circles.status, 'confirmed')
+          ))
+          .where(and(
+            eq(promptResponses.promptId, promptId),
+            sql`ABS(${promptResponses.optionIndex} - ${myResponse.optionIndex}) = 1`
+          ))
+          .limit(5);
+      }
 
-  const state = matches.length > 0
-    ? 'matches'
-    : adjacentMatches.length > 0
-    ? 'first_in_circle'
-    : 'first_in_network';
+      const state = matches.length > 0
+        ? 'matches'
+        : adjacentMatches.length > 0
+        ? 'first_in_circle'
+        : 'first_in_network';
 
-  return c.json({
-    state,
-    matches,
-    adjacentMatches,
-    totalCount: matches.length,
-  });
+      return { state, matches, adjacentMatches, totalCount: matches.length };
+    },
+  );
+
+  return c.json(result);
 });

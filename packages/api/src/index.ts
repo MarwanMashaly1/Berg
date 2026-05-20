@@ -22,6 +22,7 @@ import { placesRoutes } from './routes/places.js';
 import { startWorkers } from './jobs/index.js';
 import { notificationsRoutes } from './routes/notifications.js';
 import { adminRoutes } from './routes/admin.js';
+import { matchesRoutes } from './routes/matches.js';
 import { posthog, captureException } from './lib/posthog';
 
 type Variables = {
@@ -113,6 +114,7 @@ app.route('/api/motives', motivesRoutes);
 app.route('/api/places', placesRoutes);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/admin', adminRoutes);
+app.route('/api/matches', matchesRoutes);
 
 // --- get-session debug logger -------------------------------------------------
 app.get('/api/auth/get-session', async (c, next) => {

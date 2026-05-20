@@ -37,6 +37,7 @@ type GeneratedPrompt = {
   options: PromptOption[];
   tags: string[];
   isUniversal: boolean;
+  motiveMappable: boolean;
 };
 
 const SYSTEM_PROMPT = `You are generating daily icebreaker conversation prompts for Berg — a social app for people aged 16–30 that sparks real conversations, deepens friendships, and helps people discover unexpected things about each other.
@@ -75,6 +76,18 @@ OPTION FORMAT: each option needs:
 - text: 2-5 words max
 - index: 0-based number
 
+MOTIVE-MAPPABLE PROMPTS (motiveMappable: true):
+- ~25% of the batch (about 5 of 20) should be motive-mappable
+- These are intent-surfacing: options must map directly to real-world activity categories
+- Valid activity categories: food, outdoors, catchup, movies, active, party, gaming, travel, creative
+- Example: "What kind of hang sounds good this week?" with options [🍕 Food, 🏕 Outdoors, ☕ Catch-up, 🎬 Movies]
+- Each option's key must exactly match one of the activity category names above
+
+CONVERSATIONAL PROMPTS (motiveMappable: false):
+- ~75% of the batch (about 15 of 20) are personality/preference/story reveals
+- These surface shared opinions and spark conversation, not necessarily plans
+- Options can be anything revealing and relatable
+
 Generate exactly 20 prompts. Cover all categories and mix types. Return ONLY a JSON array, no commentary.`;
 
 /**
@@ -109,7 +122,8 @@ Return a JSON array matching this structure:
   "type": "one of: pick_your_camp|this_or_that|spectrum|have_you_ever",
   "options": [{"key":"slug","emoji":"🔥","text":"Short text","index":0}],
   "tags": ["tag1","tag2"],
-  "isUniversal": true
+  "isUniversal": true,
+  "motiveMappable": false
 }]`;
 }
 
@@ -150,6 +164,7 @@ function validate(raw: unknown): GeneratedPrompt | null {
     options: cleanOptions,
     tags: Array.isArray(p.tags) ? (p.tags as string[]).slice(0, 5) : [],
     isUniversal: p.isUniversal !== false,
+    motiveMappable: p.motiveMappable === true,
   };
 }
 
@@ -218,6 +233,7 @@ export async function handleGeneratePrompts(): Promise<void> {
         options: JSON.stringify(p.options),
         tags: p.tags,
         isUniversal: p.isUniversal,
+        motiveMappable: p.motiveMappable,
         generatedBy: "llm",
         createdAt: new Date(),
       })),

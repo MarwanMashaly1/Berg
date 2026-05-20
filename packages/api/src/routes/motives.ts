@@ -11,12 +11,14 @@ import {
   chatMembers,
   users,
   groupCircleMembers,
+  promptMatches,
 } from '@berg/shared';
+import { or } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth.js';
 import { sendPush, sendPushBatch, filterByPreference } from '../lib/notifications.js';
 import { enqueueAt } from '../lib/queue.js';
 import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
-import { cache, CK } from '../lib/cache.js';
+import { cache, TTL, CK } from '../lib/cache.js';
 import { posthog } from '../lib/posthog.js';
 import type { auth } from '../auth.js';
 
@@ -33,6 +35,8 @@ const createMotiveSchema = z.object({
   note: z.string().max(500).nullable().optional(),
   invitedUserIds: z.array(z.string().min(1)).max(50).default([]),
   invitedCircleIds: z.array(z.string().uuid()).max(20).default([]),
+  // [align-2] Links this motive back to the prompt match that triggered it
+  originPromptId: z.string().uuid().nullable().optional(),
 });
 
 const updateMotiveSchema = z.object({
@@ -114,6 +118,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
     note,
     invitedUserIds: rawInvitedUserIds = [],
     invitedCircleIds = [],
+    originPromptId,
   } = body;
 
   // Expand circle members into the final invitedUserIds list
@@ -141,6 +146,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
       lat,
       lng,
       note,
+      originPromptId: originPromptId ?? null,
     })
     .returning({ id: motives.id });
 
@@ -201,8 +207,28 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
     await ensureMotiveChat(motive.id, title, allIds);
   }
 
-  // Invalidate profile stats -- motive count changed
+  // [align-2] Mark prompt_matches as 'acted' when this motive originates from a match.
+  // Finds any open match between the creator and any invited attendee on this prompt.
+  if (originPromptId && invitedUserIds.length > 0) {
+    for (const friendId of invitedUserIds) {
+      const [userA, userB] = me.id < friendId ? [me.id, friendId] : [friendId, me.id];
+      await db
+        .update(promptMatches)
+        .set({ status: 'acted', motiveId: motive.id, updatedAt: new Date() })
+        .where(
+          and(
+            eq(promptMatches.promptId, originPromptId),
+            eq(promptMatches.userAId, userA),
+            eq(promptMatches.userBId, userB),
+            inArray(promptMatches.status, ['pending', 'viewed']),
+          ),
+        );
+    }
+  }
+
+  // Invalidate profile stats and motive list cache
   cache.del(CK.stats(me.id));
+  cache.delPrefix(`motives:list:${me.id}:`);
 
   posthog.capture({
     distinctId: me.id,
@@ -225,6 +251,13 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
 motivesRoutes.get('/', async (c) => {
   const me = c.get('user')!;
   const filter = c.req.query('filter') ?? 'all';
+
+  const cacheKey = CK.motivesList(me.id, filter);
+  const cached = cache.get<{ motives: unknown[] }>(cacheKey);
+  if (cached) {
+    c.header('X-Cache', 'HIT');
+    return c.json(cached);
+  }
 
   // Find all motives where the user is an attendee
   const attendeeRows = await db
@@ -319,7 +352,9 @@ motivesRoutes.get('/', async (c) => {
     memoryCount: memoryCountMap.get(motive.id) ?? 0,
   }));
 
-  return c.json({ motives: result });
+  const final = { motives: result };
+  cache.set(cacheKey, final, TTL.MOTIVES_LIST);
+  return c.json(final);
 });
 
 // --- GET /api/motives/:id -- Motive detail -------------------------------------
@@ -424,6 +459,7 @@ motivesRoutes.patch('/:id', zValidator('json', updateMotiveSchema), async (c) =>
   if (note !== undefined) updates.note = note;
 
   await db.update(motives).set(updates).where(eq(motives.id, motiveId));
+  cache.delPrefix(`motives:list:${me.id}:`);
 
   // Auto-create chat when transitioning to confirmed
   if (status === 'confirmed') {
@@ -462,6 +498,7 @@ motivesRoutes.delete('/:id', async (c) => {
   }
 
   await db.update(motives).set({ status: 'cancelled' }).where(eq(motives.id, motiveId));
+  cache.delPrefix(`motives:list:${me.id}:`);
 
   return c.json({ ok: true });
 });
@@ -507,6 +544,8 @@ motivesRoutes.post('/:id/rsvp', async (c) => {
     .update(motiveAttendees)
     .set({ rsvpStatus, respondedAt: new Date() })
     .where(and(eq(motiveAttendees.motiveId, motiveId), eq(motiveAttendees.userId, me.id)));
+
+  cache.delPrefix(`motives:list:${me.id}:`);
 
   // N2 -- RSVP response push to creator
   if (motiveRow.creatorId !== me.id) {
@@ -554,6 +593,7 @@ motivesRoutes.post('/:id/confirm', async (c) => {
     .set({ status: newStatus, updatedAt: new Date() })
     .where(eq(motives.id, motiveId));
 
+  cache.delPrefix(`motives:list:${me.id}:`);
   return c.json({ ok: true, status: newStatus });
 });
 
