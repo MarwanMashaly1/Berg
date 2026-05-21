@@ -92,15 +92,28 @@ export const TTL = {
   PULSE:               5 * 60 * 1000,           // 5 minutes
   // Profile stats (counts change on mutations — invalidated on write)
   PROFILE_STATS:       2 * 60 * 1000,           // 2 minutes
+  // Per-user data — invalidated on mutation
+  USER_PROFILE:        2 * 60 * 1000,           // 2 minutes
+  CHAT_LIST:           5 * 60 * 1000,           // 5 minutes
+  CONNECTIONS:         2 * 60 * 1000,           // 2 minutes
+  PROFILE_CIRCLES:     5 * 60 * 1000,           // 5 minutes
+  PROMPT_MATCHES:      2 * 60 * 1000,           // 2 minutes
+  MOTIVES_LIST:        2 * 60 * 1000,           // 2 minutes
 } as const;
 
 // ── Cache key builders ────────────────────────────────────────────────────────
 
 export const CK = {
-  promptToday: (date: string) => `prompt:today:${date}`,
-  vibeTags:    () => `vibe-tags`,
-  fof:         (userId: string) => `fof:${userId}`,
-  circles:     (userId: string) => `circles:suggest:${userId}`,
-  pulse:       (userId: string) => `pulse:${userId}`,
-  stats:       (userId: string) => `profile:stats:${userId}`,
+  promptToday:    (date: string) => `prompt:today:${date}`,
+  vibeTags:       () => `vibe-tags`,
+  fof:            (userId: string) => `fof:${userId}`,
+  circles:        (userId: string) => `circles:suggest:${userId}`,
+  pulse:          (userId: string) => `pulse:${userId}`,
+  stats:          (userId: string) => `profile:stats:${userId}`,
+  userMe:         (userId: string) => `user:me:${userId}`,
+  chatList:       (userId: string) => `chats:list:${userId}`,
+  connections:    (userId: string) => `profile:connections:${userId}`,
+  profileCircles: (userId: string) => `profile:circles:${userId}`,
+  promptMatches:  (promptId: string, userId: string) => `prompt:matches:${promptId}:${userId}`,
+  motivesList:    (userId: string, filter: string) => `motives:list:${userId}:${filter}`,
 } as const;

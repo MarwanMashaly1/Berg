@@ -21,6 +21,7 @@ import {
   accounts,
 } from "@berg/shared";
 import { enqueue } from "../lib/queue.js";
+import { cache, TTL, CK } from "../lib/cache.js";
 import { requireAuth } from "../middleware/auth.js";
 import { supabaseAdmin, AVATARS_BUCKET } from "../lib/supabase-admin.js";
 import { rateLimiter, API_LIMITS } from "../lib/rate-limiter.js";
@@ -52,27 +53,30 @@ export const userPublicRoutes = new Hono<{ Variables: Variables }>();
 userRoutes.get("/me", async (c) => {
   const me = c.get("user");
   if (!me) return c.json({ error: "Unauthorized" }, 401);
-  const [user] = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      image: users.image,
-      displayName: users.displayName,
-      username: users.username,
-      bio: users.bio,
-      availabilityStatus: users.availabilityStatus,
-      onboardingStep: users.onboardingStep,
-      onboardingCompleted: users.onboardingCompleted,
-      notifyPromptMatches: users.notifyPromptMatches,
-      notifyCircleRequests: users.notifyCircleRequests,
-      notifyMotiveInvites: users.notifyMotiveInvites,
-      showInDiscovery: users.showInDiscovery,
-    })
-    .from(users)
-    .where(eq(users.id, me.id))
-    .limit(1);
-  return c.json({ user: user ?? null });
+  const user = await cache.wrap(CK.userMe(me.id), TTL.USER_PROFILE, async () => {
+    const [row] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        image: users.image,
+        displayName: users.displayName,
+        username: users.username,
+        bio: users.bio,
+        availabilityStatus: users.availabilityStatus,
+        onboardingStep: users.onboardingStep,
+        onboardingCompleted: users.onboardingCompleted,
+        notifyPromptMatches: users.notifyPromptMatches,
+        notifyCircleRequests: users.notifyCircleRequests,
+        notifyMotiveInvites: users.notifyMotiveInvites,
+        showInDiscovery: users.showInDiscovery,
+      })
+      .from(users)
+      .where(eq(users.id, me.id))
+      .limit(1);
+    return row ?? null;
+  });
+  return c.json({ user });
 });
 
 // PATCH /api/users/me -- update profile fields + advance onboarding step
@@ -155,6 +159,7 @@ userRoutes.patch("/me", zValidator("json", patchUserSchema), async (c) => {
     .where(eq(users.id, currentUser.id))
     .limit(1);
 
+  cache.del(CK.userMe(currentUser.id));
   return c.json({ user: updated ?? null });
 });
 

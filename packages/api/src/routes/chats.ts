@@ -14,6 +14,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { debouncedChatPush } from '../lib/notifications.js';
 import { supabaseAdmin, CHAT_IMAGES_BUCKET } from '../lib/supabase-admin.js';
 import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
+import { cache, TTL, CK } from '../lib/cache.js';
 import type { auth } from '../auth.js';
 
 type Variables = {
@@ -37,6 +38,12 @@ async function assertMember(chatId: string, userId: string) {
 // -- GET /api/chats -- list all chats for current user -------------------------
 chatsRoutes.get('/', async (c) => {
   const me = c.get('user')!;
+
+  const cached = cache.get<{ chats: unknown[] }>(CK.chatList(me.id));
+  if (cached) {
+    c.header('X-Cache', 'HIT');
+    return c.json(cached);
+  }
 
   // All chats the user belongs to
   const memberRows = await db
@@ -138,10 +145,14 @@ chatsRoutes.get('/', async (c) => {
     return tb - ta;
   });
 
-  return c.json({ chats: enriched });
+  const result = { chats: enriched };
+  cache.set(CK.chatList(me.id), result, TTL.CHAT_LIST);
+  c.header('X-Cache', 'MISS');
+  return c.json(result);
 });
 
 // -- POST /api/chats/groups -- create a personal group chat --------------------
+// [align-4] Route retained for existing chats. New group creation hidden from UI per PRODUCT_NORTH_STAR.md.
 // MUST be registered before /:id routes
 chatsRoutes.post('/groups', async (c) => {
   const me = c.get('user')!;
@@ -160,6 +171,7 @@ chatsRoutes.post('/groups', async (c) => {
     allIds.map((uid) => ({ chatId: chat.id, userId: uid })),
   );
 
+  for (const uid of allIds) cache.del(CK.chatList(uid));
   return c.json({ id: chat.id }, 201);
 });
 
@@ -208,6 +220,8 @@ chatsRoutes.post('/direct', async (c) => {
     { chatId: chat.id, userId },
   ]);
 
+  cache.del(CK.chatList(me.id));
+  cache.del(CK.chatList(userId));
   return c.json({ id: chat.id, isNew: true }, 201);
 });
 
@@ -343,6 +357,8 @@ chatsRoutes.post('/:id/messages', async (c) => {
     .set({ lastReadAt: new Date() })
     .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, me.id)));
 
+  cache.del(CK.chatList(me.id));
+
   // N7 -- New chat message push to all other members
   if (type !== 'system') {
     const [allMembers, chatRow] = await Promise.all([
@@ -350,6 +366,7 @@ chatsRoutes.post('/:id/messages', async (c) => {
       db.select({ type: chats.type, name: chats.name }).from(chats).where(eq(chats.id, chatId)).limit(1),
     ]);
     const otherMembers = allMembers.filter((m) => m.userId !== me.id).map((m) => m.userId);
+    for (const uid of otherMembers) cache.del(CK.chatList(uid));
     if (otherMembers.length > 0 && chatRow[0]) {
       const chat = chatRow[0];
       const preview = content.length > 60 ? content.slice(0, 57) + '...' : content;

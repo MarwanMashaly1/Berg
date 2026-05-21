@@ -8,11 +8,14 @@ import { and, eq, inArray, notInArray, ne, sql } from 'drizzle-orm';
 /**
  * FOF suggestion scoring -- 5 signals, weighted sum -> 0.00-1.00
  *
- * 1. Mutual friends    35% -- shared confirmed connections (normalised /3)
- * 2. Vibe tag Jaccard  30% -- intersection/union of tag sets
- * 3. Motive overlap    20% -- shared motive attendance (normalised /2)
- * 4. Prompt similarity 10% -- matching optionKey on same prompts
- * 5. Recency            5% -- linear decay over 30 days since last active
+ * [align-3] Reweighted to heavily favour mutual friends (real-world proximity).
+ * Candidates with zero mutual friends are excluded entirely (not Berg's target signal).
+ *
+ * 1. Mutual friends    60% -- shared confirmed connections (normalised /5, cap raised from 3→5)
+ * 2. Vibe tag Jaccard  15% -- tiebreaker only, down from 30%
+ * 3. Motive overlap    15% -- real-world signal, down from 20%
+ * 4. Prompt similarity  5% -- weak signal at this scale, down from 10%
+ * 5. Recency            5% -- unchanged
  */
 function score(
   myFriendIds: Set<string>,
@@ -27,23 +30,23 @@ function score(
     updatedAt: Date | null;
   },
 ): number {
-  // 1. Mutual friends (35%)
+  // 1. Mutual friends (60%) -- cap raised to 5 to reward deeper social overlap
   let mutualCount = 0;
   for (const id of myFriendIds) { if (candidate.friendIds.has(id)) mutualCount++; }
-  const mutualScore = Math.min(mutualCount / 3, 1);
+  const mutualScore = Math.min(mutualCount / 5, 1);
 
-  // 2. Vibe tag Jaccard (30%)
+  // 2. Vibe tag Jaccard (15%) -- tiebreaker only
   let tagIntersect = 0;
-  let tagUnion = new Set([...myTagIds, ...candidate.tagIds]).size;
+  const tagUnion = new Set([...myTagIds, ...candidate.tagIds]).size;
   for (const id of myTagIds) { if (candidate.tagIds.has(id)) tagIntersect++; }
   const tagScore = tagUnion > 0 ? tagIntersect / tagUnion : 0;
 
-  // 3. Motive attendance overlap (20%)
+  // 3. Motive attendance overlap (15%)
   let motiveOverlap = 0;
   for (const id of myMotiveIds) { if (candidate.motiveIds.has(id)) motiveOverlap++; }
   const motiveScore = Math.min(motiveOverlap / 2, 1);
 
-  // 4. Prompt answer similarity (10%)
+  // 4. Prompt answer similarity (5%)
   let promptTotal = 0;
   let promptMatch = 0;
   for (const [promptId, myKey] of myPromptMap) {
@@ -62,10 +65,10 @@ function score(
   const recencyScore = Math.max(0, 1 - daysSince / 30);
 
   return (
-    mutualScore  * 0.35 +
-    tagScore     * 0.30 +
-    motiveScore  * 0.20 +
-    promptScore  * 0.10 +
+    mutualScore  * 0.60 +
+    tagScore     * 0.15 +
+    motiveScore  * 0.15 +
+    promptScore  * 0.05 +
     recencyScore * 0.05
   );
 }
@@ -246,6 +249,9 @@ export async function recomputeFofForUser(userId: string): Promise<void> {
     // Compute mutual friend IDs
     const mutualFriendIds: string[] = [];
     for (const id of myFriendIds) { if (cFriends.has(id)) mutualFriendIds.push(id); }
+
+    // [align-3] Hard filter: no mutual friends = not in the user's real-world orbit → skip
+    if (mutualFriendIds.length === 0) continue;
 
     // Compute shared tag count
     let sharedTagCount = 0;

@@ -56,6 +56,7 @@ discoveryRoutes.get('/people', async (c) => {
       score: fofSuggestions.score,
       sharedTagCount: fofSuggestions.sharedTagCount,
       mutualFriendIds: fofSuggestions.mutualFriendIds,
+      computedAt: fofSuggestions.computedAt,
     })
     .from(fofSuggestions)
     .where(eq(fofSuggestions.userId, me.id))
@@ -171,10 +172,24 @@ discoveryRoutes.get('/people', async (c) => {
   // Sort by fofScore DESC (in case fallback mixed them)
   people.sort((a, b) => parseFloat(b.fofScore) - parseFloat(a.fofScore));
 
-  const result = { people };
+  // Most recent computedAt across all FOF rows (null if no FOF data yet)
+  const lastComputedAt = fofRows.reduce<Date | null>((max, r) => {
+    if (!r.computedAt) return max;
+    return max === null || r.computedAt > max ? r.computedAt : max;
+  }, null);
+
+  const result = { people, lastComputedAt: lastComputedAt?.toISOString() ?? null };
   cache.set(CK.fof(me.id), result, TTL.FOF_SUGGESTIONS);
   c.header('X-Cache', 'MISS');
   return c.json(result);
+});
+
+// POST /api/discovery/people/recompute -- on-demand FOF recompute for current user
+discoveryRoutes.post('/people/recompute', async (c) => {
+  const me = c.get('user')!;
+  cache.del(CK.fof(me.id));
+  await enqueue('discovery/recompute-fof-user', { userId: me.id });
+  return c.json({ queued: true });
 });
 
 // GET /api/discovery/circles -- scored suggestions, cached 10 min per user
@@ -498,6 +513,8 @@ circlesRoutes.post('/', async (c) => {
 
     // New circle is public — bust circle suggestion cache for all users so it shows up immediately
     cache.delPrefix('circles:suggest:');
+    cache.del(CK.profileCircles(me.id));
+    cache.del(CK.chatList(me.id));
 
     return c.json({ id: circle.id, joinCode: circle.joinCode, chatId: chat.id }, 201);
   } catch (err) {
@@ -594,7 +611,11 @@ circlesRoutes.post('/:id/join', async (c) => {
 
   // Invalidate circle suggestions and stats for this user
   cache.del(CK.circles(me.id));
-  if (status === 'active') cache.del(CK.stats(me.id));
+  cache.del(CK.profileCircles(me.id));
+  if (status === 'active') {
+    cache.del(CK.stats(me.id));
+    cache.del(CK.chatList(me.id));
+  }
 
   return c.json({ ok: true, status, memberCount, chatId });
 });
@@ -663,6 +684,8 @@ circlesRoutes.post('/accept/:userId', async (c) => {
   cache.del(CK.fof(requesterId));
   cache.del(CK.stats(me.id));
   cache.del(CK.stats(requesterId));
+  cache.del(CK.connections(me.id));
+  cache.del(CK.connections(requesterId));
 
   return c.json({ ok: true });
 });
@@ -677,6 +700,8 @@ circlesRoutes.delete('/disconnect/:userId', async (c) => {
   );
   cache.del(CK.stats(me.id));
   cache.del(CK.stats(targetId));
+  cache.del(CK.connections(me.id));
+  cache.del(CK.connections(targetId));
   return c.json({ ok: true });
 });
 
@@ -685,6 +710,7 @@ circlesRoutes.delete('/decline/:userId', async (c) => {
   const me = c.get('user')!;
   const requesterId = c.req.param('userId');
   await db.delete(circles).where(and(eq(circles.userId, requesterId), eq(circles.friendId, me.id), eq(circles.status, 'pending')));
+  cache.del(CK.connections(me.id));
   return c.json({ ok: true });
 });
 
@@ -695,6 +721,7 @@ circlesRoutes.delete('/cancel/:userId', async (c) => {
   await db.delete(circles).where(
     and(eq(circles.userId, me.id), eq(circles.friendId, targetId), eq(circles.status, 'pending')),
   );
+  cache.del(CK.connections(me.id));
   return c.json({ ok: true });
 });
 
@@ -863,6 +890,8 @@ circlesRoutes.post('/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
   }
 
   cache.del(CK.stats(targetUserId));
+  cache.del(CK.profileCircles(targetUserId));
+  cache.del(CK.chatList(targetUserId));
   return c.json({ ok: true });
 });
 
@@ -892,6 +921,8 @@ circlesRoutes.delete('/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
   }
 
   cache.del(CK.stats(targetUserId));
+  cache.del(CK.profileCircles(targetUserId));
+  cache.del(CK.chatList(targetUserId));
   return c.json({ ok: true });
 });
 

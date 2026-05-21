@@ -68,15 +68,17 @@ export async function startWorkers(): Promise<void> {
     async (jobs: any[]) => { await Promise.allSettled(jobs.map(handleRecomputeFofUser)); },
   );
 
-  // Daily cron: recompute FOF for ALL users at 3am UTC
-  // Every 24h. Immediate triggers handle time-sensitive changes.
-  await boss.schedule(
-    'discovery/recompute-fof-all',
-    '0 3 * * *',   // 3am UTC daily
-    {},
-  );
+  // [align-3] Daily cron PAUSED — too few users for batch FOF to produce useful output.
+  // FOF is now computed on-demand when a user views their suggestions screen.
+  // Re-enable when user count > 100 in a single locality. See PRODUCT_NORTH_STAR.md.
+  //
+  // await boss.schedule(
+  //   'discovery/recompute-fof-all',
+  //   '0 3 * * *',   // 3am UTC daily
+  //   {},
+  // );
 
-  // Worker for the cron-triggered all-users job
+  // Worker registration stays — on-demand triggers via discovery/recompute-fof-user still work
   await boss.work(
     'discovery/recompute-fof-all',
     { teamSize: 1 },
