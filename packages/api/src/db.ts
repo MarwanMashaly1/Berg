@@ -5,7 +5,8 @@ import * as schema from '@berg/shared';
 const connectionString = process.env.DATABASE_URL!;
 
 const client = postgres(connectionString, {
-  prepare: false,
+  max: 20,        // connection pool ceiling; raise if stress tests show exhaustion
+  prepare: false, // required for Supabase pgbouncer (transaction mode)
   ssl: 'require',
 });
 
