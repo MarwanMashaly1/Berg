@@ -2,10 +2,12 @@
 // Sentry must be initialized before any other imports that might throw
 import { initSentry, sentryCaptureException } from './lib/sentry.js';
 initSentry();
+import { log } from './lib/logger.js';
 
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
+import { requestId } from 'hono/request-id';
 import { auth } from './auth';
 import { sessionMiddleware } from './middleware/auth';
 import { phoneRoutes } from './routes/phone';
@@ -13,7 +15,8 @@ import { verifyCodeRoutes } from './routes/verify-code';
 import { userRoutes, userPublicRoutes } from './routes/users.js';
 import { vibeTagRoutes } from './routes/vibe-tags.js';
 import { promptRoutes } from './routes/prompts.js';
-import { discoveryRoutes, circlesRoutes } from './routes/discovery.js';
+import { discoveryRoutes } from './routes/discovery.js';
+import { circlesRoutes } from './routes/circles.js';
 import { profileRoutes } from './routes/profile.js';
 import { chatsRoutes } from './routes/chats.js';
 import { motivesRoutes } from './routes/motives.js';
@@ -24,6 +27,9 @@ import { notificationsRoutes } from './routes/notifications.js';
 import { adminRoutes } from './routes/admin.js';
 import { matchesRoutes } from './routes/matches.js';
 import { posthog, captureException } from './lib/posthog';
+import { db, client } from './db.js';
+import { sql } from 'drizzle-orm';
+import { stopQueue } from './lib/queue.js';
 
 type Variables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -32,6 +38,8 @@ type Variables = {
 
 const app = new Hono<{ Variables: Variables }>();
 
+app.use('*', requestId());
+
 // --- Security headers
 app.use('*', async (c, next) => {
   await next();
@@ -39,16 +47,18 @@ app.use('*', async (c, next) => {
   c.header('X-Frame-Options', 'DENY');
   c.header('X-XSS-Protection', '1; mode=block');
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 });
 
 // --- Request logger + performance tracking -----------------------------------
 app.use('*', async (c, next) => {
+  const rid = c.get('requestId');
   const start = Date.now();
-  console.log(`-> ${c.req.method} ${c.req.path}`);
+  log.info({ rid, method: c.req.method, path: c.req.path }, 'request');
   await next();
   const ms = Date.now() - start;
   const status = c.res.status;
-  console.log(`<- ${c.req.method} ${c.req.path} ${status} ${ms}ms`);
+  log.info({ rid, method: c.req.method, path: c.req.path, status, ms }, 'response');
 
   // Capture slow requests (>2s) to PostHog for performance visibility
   if (ms > 2000) {
@@ -83,8 +93,15 @@ app.use(
 );
 
 // --- Session middleware -- MUST run before route handlers that need auth ------
-// Health check — no auth, used by UptimeRobot to keep the server alive
-app.get('/health', (c) => c.json({ ok: true }));
+// Health check — verifies DB connectivity; Render takes instance out of rotation on 503
+app.get('/health', async (c) => {
+  try {
+    await db.execute(sql`SELECT 1`);
+    return c.json({ ok: true, db: 'ok' });
+  } catch {
+    return c.json({ ok: false, db: 'unreachable' }, 503);
+  }
+});
 
 // Magic link deep-link redirect — receives token from email button, redirects to app
 // WITHOUT consuming the token. App then calls /api/auth/verify-code for the one real verification.
@@ -116,27 +133,6 @@ app.route('/api/notifications', notificationsRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/matches', matchesRoutes);
 
-// --- get-session debug logger -------------------------------------------------
-app.get('/api/auth/get-session', async (c, next) => {
-  const cookie = c.req.header('cookie');
-  console.log(`[get-session] cookie header present: ${!!cookie} | first 80: ${cookie?.slice(0, 80) ?? 'NONE'}`);
-  await next();
-  console.log(`[get-session] response status: ${c.res.status}`);
-});
-
-// --- Google OAuth callback debug logger --------------------------------------
-app.get('/api/auth/callback/google', async (c, next) => {
-  const code = c.req.query('code');
-  const error = c.req.query('error');
-  const errorDesc = c.req.query('error_description');
-  const state = c.req.query('state');
-  console.log(`[google-oauth] callback hit — code:${code ? 'YES' : 'NO'} error:${error ?? 'none'} errorDesc:${errorDesc ?? 'none'} state:${state ? 'YES' : 'NO'}`);
-  console.log(`[google-oauth] GOOGLE_CLIENT_ID set: ${!!process.env.GOOGLE_CLIENT_ID}`);
-  console.log(`[google-oauth] GOOGLE_CLIENT_SECRET set: ${!!process.env.GOOGLE_CLIENT_SECRET}`);
-  console.log(`[google-oauth] BETTER_AUTH_URL: ${process.env.BETTER_AUTH_URL ?? '(not set)'}`);
-  return next();
-});
-
 // --- BetterAuth handler -- catches all remaining /api/auth/* ------------------
 app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
   const timeout = new Promise<Response>((_, reject) =>
@@ -146,11 +142,11 @@ app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
     const res = await Promise.race([auth.handler(c.req.raw), timeout]) as Response;
     if (res.status !== 200) {
       const body = await res.clone().text();
-      console.error(`🔴 BetterAuth ${c.req.path} -> ${res.status}:`, body);
+      log.warn({ path: c.req.path, status: res.status, body }, 'betterauth non-200');
     }
     return res;
   } catch (err) {
-    console.error('🔴 Auth handler error:', err);
+    log.error({ err, path: c.req.path }, 'betterauth handler error');
     sentryCaptureException(err, { path: c.req.path, method: c.req.method });
     captureException(err, undefined, { path: c.req.path, method: c.req.method, source: 'better-auth' });
     return c.json({ error: String(err) }, 500);
@@ -159,9 +155,10 @@ app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.onError((err, c) => {
+  const rid = c.get('requestId');
   const userId = c.get('user')?.id;
   const ctx = { path: c.req.path, method: c.req.method };
-  console.error(`[error] ${c.req.method} ${c.req.path}:`, err);
+  log.error({ err, rid, userId, ...ctx }, 'unhandled route error');
   // Dual-report: Sentry for full stack traces + source maps, PostHog for user timeline
   sentryCaptureException(err, { userId, ...ctx });
   captureException(err, userId, ctx);
@@ -175,27 +172,33 @@ app.get('/', (c) => c.json({ status: 'Berg API', version: '0.0.1' }));
 const port = Number(process.env.PORT) || 3000;
 
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`Berg API running on http://localhost:${info.port}`);
-  // Start pg-boss workers after server is up
-  startWorkers().catch((err) => console.error('[workers] Failed to start:', err));
+  log.info({ port: info.port }, 'Berg API running');
+  startWorkers().catch((err) => log.error({ err }, 'workers failed to start'));
 });
 
 // ─── Process-level safety nets ────────────────────────────────────────────────
 // These catch anything that escapes Hono's onError (e.g. bg workers, timers)
 process.on('uncaughtException', (err) => {
-  console.error('[uncaughtException]', err);
+  log.error({ err }, 'uncaughtException');
   sentryCaptureException(err, { extra: { source: 'uncaughtException' } });
   captureException(err, undefined, { source: 'uncaughtException' });
 });
 
 process.on('unhandledRejection', (reason) => {
   const err = reason instanceof Error ? reason : new Error(String(reason));
-  console.error('[unhandledRejection]', err);
+  log.error({ err }, 'unhandledRejection');
   sentryCaptureException(err, { extra: { source: 'unhandledRejection' } });
   captureException(err, undefined, { source: 'unhandledRejection' });
 });
 
-process.on('SIGTERM', () => posthog.shutdown());
-process.on('SIGINT', () => posthog.shutdown());
+async function shutdown() {
+  log.info('shutdown: draining...');
+  await stopQueue().catch((err) => log.error({ err }, 'shutdown: queue stop failed'));
+  await client.end().catch((err) => log.error({ err }, 'shutdown: db close failed'));
+  await posthog.shutdown().catch((err) => log.error({ err }, 'shutdown: posthog flush failed'));
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 export { app };
