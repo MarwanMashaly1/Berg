@@ -12,6 +12,8 @@ Builds/
 credentials.json
 *-firebase-adminsdk-*.json
 generate-apple-secret.mjs
+*.p8
+*.pem
 
 # EAS build config — contains embedded API keys
 apps/mobile/eas.json
@@ -32,4 +34,7 @@ keys/
 .DS_Store
 
 commandlinetools-linux-11076708_latest.zip
+
+
+*.apk
 
