@@ -21,7 +21,7 @@ export const posthog: PostHog = apiKey
 
 // Drain the queue before the process exits so no events are lost
 if (apiKey) {
-  const shutdown = () => posthog.shutdown().catch(() => {});
+  const shutdown = () => posthog.shutdown().catch((err) => console.error('[posthog] shutdown failed:', err));
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
   process.once('beforeExit', shutdown);

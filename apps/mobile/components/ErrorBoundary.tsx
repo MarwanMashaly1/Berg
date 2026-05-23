@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors, Fonts } from '../constants/theme';
-
-const C = Colors.light;
+import { C, Fonts } from '../constants/theme';
+import { captureError } from '../lib/analytics';
 
 interface State { hasError: boolean; errorMessage?: string }
 
@@ -13,8 +12,8 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Stat
     return { hasError: true, errorMessage: error?.message ?? String(error) };
   }
 
-  componentDidCatch(_error: Error, _info: React.ErrorInfo) {
-    // Sentry removed — re-add once native plugin is properly configured
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    captureError(error, { componentStack: info.componentStack ?? undefined });
   }
 
   render() {

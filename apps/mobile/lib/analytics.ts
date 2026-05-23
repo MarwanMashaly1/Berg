@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/react-native';
+import { Sentry } from './sentry';
 import { posthog } from './posthog';
 
 // ─── Identify / reset ─────────────────────────────────────────────────────────

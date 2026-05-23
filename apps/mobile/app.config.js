@@ -87,8 +87,15 @@ const config = {
     'expo-localization',
     'expo-secure-store',
     'expo-web-browser',
-    // Sentry plugin disabled — sentry-cli fails to resolve in pnpm monorepo context on EAS
-    // Re-enable once sentry-cli path is fixed or Sentry is configured as a post-build step
+    [
+      '@sentry/react-native/expo',
+      {
+        url: 'https://sentry.io',
+        // authToken omitted intentionally — skips sentry-cli source map upload,
+        // avoids pnpm monorepo resolution failure on EAS. Native crash handling
+        // still wired up. Add authToken to EAS secrets to enable source maps.
+      },
+    ],
   ],
   experiments: {
     typedRoutes: false,
