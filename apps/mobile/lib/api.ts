@@ -5,8 +5,8 @@ import * as SecureStore from 'expo-secure-store';
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,       // 5 minutes
-      gcTime: 1000 * 60 * 60,          // 1 hour
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 60, // 1 hour
       retry: 2,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
     },
@@ -16,7 +16,19 @@ export const queryClient = new QueryClient({
   },
 });
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+/**
+ * Default to the real deployed API in production builds.
+ *
+ * Rationale:
+ * - In EAS builds, EXPO_PUBLIC_* vars are compiled into the JS bundle.
+ * - If EXPO_PUBLIC_API_URL is missing in a production binary/update, falling back
+ *   to localhost will break on-device and can cascade into an ErrorBoundary.
+ */
+const DEFAULT_API_URL = __DEV__
+  ? 'http://localhost:3000'
+  : 'https://berg-api.onrender.com';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL;
 
 /**
  * Authenticated fetch wrapper.
@@ -43,7 +55,15 @@ export async function apiFetch<T>(
 
   if (__DEV__) {
     const rawStored = SecureStore.getItem('berg_cookie');
-    console.log('[apiFetch]', fetchOptions.method ?? 'GET', `${API_URL}${path}`, 'cookie:', cookies ? cookies.slice(0, 60) : 'none', '| raw:', rawStored ? rawStored.slice(0, 60) : 'NULL');
+    console.log(
+      '[apiFetch]',
+      fetchOptions.method ?? 'GET',
+      `${API_URL}${path}`,
+      'cookie:',
+      cookies ? cookies.slice(0, 60) : 'none',
+      '| raw:',
+      rawStored ? rawStored.slice(0, 60) : 'NULL'
+    );
   }
 
   const response = await fetch(`${API_URL}${path}`, {
@@ -67,14 +87,14 @@ export async function apiFetch<T>(
   return response.json() as Promise<T>;
 }
 
-// ─── Notification inbox ────────────────────────────────────────────────────────
+// ─── Notification inbox ──────────────────────────────────────────────────────��[...]
 
 export type NotificationItem = {
   id: string;
   title: string;
   body: string;
-  data: string | null;        // JSON string — parse to get { screen, motiveId, etc. }
-  readAt: string | null;      // null = unread
+  data: string | null; // JSON string — parse to get { screen, motiveId, etc. }
+  readAt: string | null; // null = unread
   createdAt: string;
 };
 
@@ -94,10 +114,10 @@ export function markNotificationRead(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: 'POST' });
 }
 
-// ─── Push token ────────────────────────────────────────────────────────────────
+// ─── Push token ─────────────────────────────────────────────────────────�[...]
 
 export function getUserMe() {
-  return apiFetch<{ user: { id: string; name: string | null; displayName: string | null; username: string | null; bio: string | null; image: string | null; availabilityStatus: string; onboardingCompleted: boolean | null } | null }>('/api/users/me');
+  return apiFetch<{ user: { id: string; name: string | null; displayName: string | null; username: string | null; bio: string | null; image: string | null; availabilityStatus: string; onboardingC[...]
 }
 
 export function getPublicUser(userId: string) {
@@ -134,7 +154,7 @@ export function deleteAccount() {
 
 export async function checkUsername(username: string) {
   return apiFetch<{ available: boolean; reason?: string }>(
-    `/api/users/check-username?username=${encodeURIComponent(username)}`,
+    `/api/users/check-username?username=${encodeURIComponent(username)}`
   );
 }
 
@@ -147,9 +167,7 @@ export type UserSearchResult = {
 };
 
 export async function searchUsers(q: string) {
-  return apiFetch<{ users: UserSearchResult[] }>(
-    `/api/users/search?q=${encodeURIComponent(q)}`,
-  );
+  return apiFetch<{ users: UserSearchResult[] }>(`/api/users/search?q=${encodeURIComponent(q)}`);
 }
 
 export async function syncContacts(phones: string[]) {
@@ -160,7 +178,9 @@ export async function syncContacts(phones: string[]) {
 }
 
 export async function getVibeTags() {
-  return apiFetch<{ tags: Array<{ id: string; label: string; emoji: string; category: string }> }>('/api/vibe-tags');
+  return apiFetch<{ tags: Array<{ id: string; label: string; emoji: string; category: string }> }>(
+    '/api/vibe-tags'
+  );
 }
 
 export async function getUserVibeTags() {
@@ -174,7 +194,7 @@ export async function postUserVibeTags(tagIds: string[]) {
   });
 }
 
-// ─── Discovery ───────────────────────────────────────────────────────────────
+// ─── Discovery ─────────────────────────────────────────────────────────�[...]
 
 export type PromptOption = { key: string; emoji: string; text: string; index: number };
 
@@ -200,11 +220,14 @@ export function getTodayPrompt() {
   return apiFetch<TodayPromptResponse>('/api/prompts/today');
 }
 
-export function respondToPrompt(promptId: string, body: {
-  optionKey: string;
-  optionIndex: number;
-  storyText?: string;
-}) {
+export function respondToPrompt(
+  promptId: string,
+  body: {
+    optionKey: string;
+    optionIndex: number;
+    storyText?: string;
+  }
+) {
   return apiFetch<{ ok: boolean }>(`/api/prompts/${promptId}/respond`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -213,8 +236,20 @@ export function respondToPrompt(promptId: string, body: {
 
 export type MatchResult = {
   state: 'matches' | 'first_in_circle' | 'first_in_network' | 'not_answered';
-  matches: Array<{ userId: string; name: string | null; avatarUrl: string | null; optionKey: string | null; storyText: string | null }>;
-  adjacentMatches: Array<{ userId: string; name: string | null; avatarUrl: string | null; optionKey: string | null; storyText: string | null }>;
+  matches: Array<{
+    userId: string;
+    name: string | null;
+    avatarUrl: string | null;
+    optionKey: string | null;
+    storyText: string | null;
+  }>;
+  adjacentMatches: Array<{
+    userId: string;
+    name: string | null;
+    avatarUrl: string | null;
+    optionKey: string | null;
+    storyText: string | null;
+  }>;
   totalCount: number;
 };
 
@@ -300,7 +335,7 @@ export function getDiscoveryPulse() {
   return apiFetch<{ cards: PulseCard[] }>('/api/discovery/pulse');
 }
 
-// ─── Profile ──────────────────────────────────────────────────────────────────
+// ─── Profile ──────────────────────────────────────────────────────────[...]
 
 export type ProfileStats = { connections: number; circles: number; motives: number };
 export type ProfileConnection = {
@@ -312,7 +347,16 @@ export type ProfileConnection = {
 };
 export type PendingConnection = { id: string; name: string | null; image: string | null };
 export type SentConnection = { id: string; name: string | null; image: string | null };
-export type ProfileCircle = { id: string; name: string; categoryEmoji: string; categoryColor: string; coverImage: string | null; memberCount: number; friendsInsideCount: number; memberPreviews: Array<{ id: string; name: string | null; image: string | null }> };
+export type ProfileCircle = {
+  id: string;
+  name: string;
+  categoryEmoji: string;
+  categoryColor: string;
+  coverImage: string | null;
+  memberCount: number;
+  friendsInsideCount: number;
+  memberPreviews: A[...]
+};
 export type InviteLink = { code: string; url: string };
 
 export function getProfileStats() {
@@ -320,7 +364,9 @@ export function getProfileStats() {
 }
 
 export function getProfileConnections() {
-  return apiFetch<{ confirmed: ProfileConnection[]; pending: PendingConnection[]; sent: SentConnection[] }>('/api/profile/connections');
+  return apiFetch<{ confirmed: ProfileConnection[]; pending: PendingConnection[]; sent: SentConnection[] }>(
+    '/api/profile/connections'
+  );
 }
 
 export function getProfileCircles() {
@@ -348,7 +394,9 @@ export function cancelConnection(userId: string) {
 }
 
 export function getCircleByCode(code: string) {
-  return apiFetch<{ id: string; name: string; memberCount: number; requiresApproval: boolean }>(`/api/circles/by-code/${encodeURIComponent(code)}`);
+  return apiFetch<{ id: string; name: string; memberCount: number; requiresApproval: boolean }>(
+    `/api/circles/by-code/${encodeURIComponent(code)}`
+  );
 }
 
 export type CircleDetail = {
@@ -398,14 +446,17 @@ export function createCircle(body: {
   });
 }
 
-export function updateCircle(circleId: string, body: {
-  name?: string;
-  description?: string;
-  categoryEmoji?: string;
-  categoryColor?: string;
-  requiresApproval?: boolean;
-  isPublic?: boolean;
-}) {
+export function updateCircle(
+  circleId: string,
+  body: {
+    name?: string;
+    description?: string;
+    categoryEmoji?: string;
+    categoryColor?: string;
+    requiresApproval?: boolean;
+    isPublic?: boolean;
+  }
+) {
   return apiFetch<{ ok: boolean }>(`/api/circles/${circleId}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
@@ -416,7 +467,6 @@ export async function uploadCircleImage(circleId: string, localUri: string, mime
   const cookies = authClient.getCookie();
   const formData = new FormData();
   formData.append('image', { uri: localUri, type: mimeType, name: 'cover.jpg' } as any);
-  const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
   const res = await fetch(`${API_URL}/api/circles/${circleId}/image`, {
     method: 'POST',
     headers: cookies ? { Cookie: cookies } : undefined,
@@ -434,7 +484,7 @@ export function removeMember(circleId: string, userId: string) {
   return apiFetch<{ ok: boolean }>(`/api/circles/${circleId}/members/${userId}`, { method: 'DELETE' });
 }
 
-// ─── Motives ──────────────────────────────────────────────────────────────────
+// ─── Motives ──────────────────────────────────────────────────────────[...]
 
 export type MotiveAttendee = {
   userId: string;
@@ -492,7 +542,9 @@ export function getMotives(filter?: 'active' | 'past' | 'all') {
 }
 
 export function getMotive(id: string) {
-  return apiFetch<{ motive: Motive; activity: Array<{ text: string; timestamp: string; type: string }> }>(`/api/motives/${id}`);
+  return apiFetch<{ motive: Motive; activity: Array<{ text: string; timestamp: string; type: string }> }>(
+    `/api/motives/${id}`
+  );
 }
 
 export function createMotive(body: {
@@ -532,11 +584,20 @@ export function confirmMotive(id: string, happened: boolean) {
 }
 
 export function rsvpMotive(id: string, status: 'going' | 'maybe' | 'declined') {
-  return apiFetch<{ ok: boolean }>(`/api/motives/${id}/rsvp`, { method: 'POST', body: JSON.stringify({ status }) });
+  return apiFetch<{ ok: boolean }>(`/api/motives/${id}/rsvp`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  });
 }
 
-export function saveMemory(id: string, body: { vibeTags: string[]; rating: number; venueRating?: number; photoUrls?: string[] }) {
-  return apiFetch<{ ok: boolean }>(`/api/motives/${id}/memory`, { method: 'POST', body: JSON.stringify(body) });
+export function saveMemory(
+  id: string,
+  body: { vibeTags: string[]; rating: number; venueRating?: number; photoUrls?: string[] }
+) {
+  return apiFetch<{ ok: boolean }>(`/api/motives/${id}/memory`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export function getMemory(id: string) {
@@ -545,7 +606,7 @@ export function getMemory(id: string) {
 
 export function getNearbyPlaces(category: string, lat: number, lng: number) {
   return apiFetch<{ places: PlaceSuggestion[] }>(
-    `/api/places/nearby?category=${encodeURIComponent(category)}&lat=${lat}&lng=${lng}`,
+    `/api/places/nearby?category=${encodeURIComponent(category)}&lat=${lat}&lng=${lng}`
   );
 }
 
@@ -582,7 +643,7 @@ export function getPlaceDetail(placeId: string, sessionToken?: string) {
   return apiFetch<PlaceDetail>(`/api/places/detail?${params}`);
 }
 
-// ─── Chat ─────────────────────────────────────────────────────────────────────
+// ─── Chat ───────────────────────────────────────────────────────────[...]
 
 export type ChatMessage = {
   id: string;
@@ -624,7 +685,7 @@ export function getChatMessages(chatId: string, before?: string) {
   const params = new URLSearchParams();
   if (before) params.set('before', before);
   return apiFetch<{ messages: ChatMessage[]; hasMore: boolean }>(
-    `/api/chats/${chatId}/messages${params.size ? `?${params}` : ''}`,
+    `/api/chats/${chatId}/messages${params.size ? `?${params}` : ''}`
   );
 }
 
@@ -659,7 +720,7 @@ export function renameGroupChat(chatId: string, name: string) {
 export function getChatImageUploadUrl(chatId: string, contentType: string, ext: string) {
   return apiFetch<{ uploadUrl: string; token: string; path: string; publicUrl: string }>(
     `/api/chats/${chatId}/upload-url`,
-    { method: 'POST', body: JSON.stringify({ contentType, ext }) },
+    { method: 'POST', body: JSON.stringify({ contentType, ext }) }
   );
 }
 
@@ -674,13 +735,13 @@ export function removeConnection(userId: string) {
   return apiFetch<{ ok: boolean }>(`/api/circles/disconnect/${userId}`, { method: 'DELETE' });
 }
 
-// ─── Memories ─────────────────────────────────────────────────────────────────
+// ─── Memories ─────────────────────────────────────────────────────────��[...]
 
 export type MemoryContributor = {
   userId: string;
   userName: string | null;
   userImage: string | null;
-  photos: string[];          // signed URLs, expire in 1h
+  photos: string[]; // signed URLs, expire in 1h
   vibeTags: string[];
   rating: number | null;
   venueRating: number | null;
@@ -706,22 +767,25 @@ export function getMyMemory(motiveId: string) {
 export function getMemoryUploadUrl(motiveId: string, contentType: string, ext: string) {
   return apiFetch<{ uploadUrl: string; path: string; token: string }>(
     `/api/motives/${motiveId}/memories/upload-url`,
-    { method: 'POST', body: JSON.stringify({ contentType, ext }) },
+    { method: 'POST', body: JSON.stringify({ contentType, ext }) }
   );
 }
 
 export function confirmMemoryUpload(motiveId: string, path: string) {
-  return apiFetch<{ ok: boolean; path: string }>(
-    `/api/motives/${motiveId}/memories/confirm`,
-    { method: 'POST', body: JSON.stringify({ path }) },
-  );
+  return apiFetch<{ ok: boolean; path: string }>(`/api/motives/${motiveId}/memories/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  });
 }
 
-export function saveMemoryMeta(motiveId: string, body: {
-  vibeTags?: string[];
-  rating?: number;
-  venueRating?: number;
-}) {
+export function saveMemoryMeta(
+  motiveId: string,
+  body: {
+    vibeTags?: string[];
+    rating?: number;
+    venueRating?: number;
+  }
+) {
   return apiFetch<{ ok: boolean }>(`/api/motives/${motiveId}/memories`, {
     method: 'PATCH',
     body: JSON.stringify(body),
@@ -731,6 +795,6 @@ export function saveMemoryMeta(motiveId: string, body: {
 export function deleteMemoryPhoto(motiveId: string, path: string) {
   return apiFetch<{ ok: boolean }>(
     `/api/motives/${motiveId}/memories/${encodeURIComponent(path)}`,
-    { method: 'DELETE' },
+    { method: 'DELETE' }
   );
 }
