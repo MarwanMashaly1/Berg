@@ -16,6 +16,10 @@
       "env": {
         "EAS_BUILD_PROFILE": "preview",
         "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com",
+        "EXPO_PUBLIC_POSTHOG_API_KEY": "phc_Amtr8JXb9xNbeSyovhLFJMjHx5mLWa6Nkbmi7x9efwNF",
+        "EXPO_PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://qzzhbyaejtmbayllyrnb.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_VONAGyDvWJ2WOt6FpbjExw_XRjDuzbe"
       }
     },
     "production": {
@@ -23,8 +27,10 @@
       "env": {
         "EAS_BUILD_PROFILE": "production",
         "EXPO_PUBLIC_API_URL": "https://berg-api.onrender.com",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
-        "SENTRY_ALLOW_FAILURE": "true"
+        "EXPO_PUBLIC_POSTHOG_API_KEY": "phc_Amtr8JXb9xNbeSyovhLFJMjHx5mLWa6Nkbmi7x9efwNF",
+        "EXPO_PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://qzzhbyaejtmbayllyrnb.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_VONAGyDvWJ2WOt6FpbjExw_XRjDuzbe"
       }
     }
   },

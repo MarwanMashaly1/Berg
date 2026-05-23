@@ -1,5 +1,3 @@
-const IS_PRODUCTION = process.env.EAS_BUILD_PROFILE === 'production';
-
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
   name: 'Berg',
@@ -13,6 +11,7 @@ const config = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'app.berg.social',
+    usesAppleSignIn: true,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
     },
@@ -88,20 +87,8 @@ const config = {
     'expo-localization',
     'expo-secure-store',
     'expo-web-browser',
-    // Only include Sentry plugin in production — it adds an Xcode build phase that
-    // requires sentry-cli, which can't resolve in pnpm monorepo on dev/preview builds.
-    ...(IS_PRODUCTION
-      ? [
-          [
-            '@sentry/react-native/expo',
-            {
-              url: 'https://sentry.io/',
-              project: 'react-native',
-              organization: 'berg-an',
-            },
-          ],
-        ]
-      : []),
+    // Sentry plugin disabled — sentry-cli fails to resolve in pnpm monorepo context on EAS
+    // Re-enable once sentry-cli path is fixed or Sentry is configured as a post-build step
   ],
   experiments: {
     typedRoutes: false,

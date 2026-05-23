@@ -1,21 +1,20 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import * as Sentry from '@sentry/react-native';
 import { Colors, Fonts } from '../constants/theme';
 
 const C = Colors.light;
 
-interface State { hasError: boolean }
+interface State { hasError: boolean; errorMessage?: string }
 
 export class ErrorBoundary extends React.Component<React.PropsWithChildren, State> {
   state: State = { hasError: false };
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, errorMessage: error?.message ?? String(error) };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
+  componentDidCatch(_error: Error, _info: React.ErrorInfo) {
+    // Sentry removed — re-add once native plugin is properly configured
   }
 
   render() {
@@ -33,6 +32,9 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Stat
           We've been notified and are looking into it.{'\n'}
           Please restart the app.
         </Text>
+        {!!this.state.errorMessage && (
+          <Text style={styles.debugError}>{this.state.errorMessage}</Text>
+        )}
         <TouchableOpacity
           style={styles.btn}
           activeOpacity={0.8}
@@ -75,4 +77,12 @@ const styles = StyleSheet.create({
     paddingVertical: 15, paddingHorizontal: 40,
   },
   btnText: { fontFamily: Fonts.bodySemiBold, fontSize: 16, color: '#fff' },
+  debugError: {
+    fontFamily: Fonts.body,
+    fontSize: 11,
+    color: C.textSecondary,
+    textAlign: 'center',
+    marginTop: 16,
+    paddingHorizontal: 16,
+  },
 });

@@ -36,32 +36,11 @@ import * as Notifications from 'expo-notifications';
 import { queryClient, savePushToken } from '../lib/api';
 import { Colors } from '../constants/theme';
 import { registerForPushNotificationsAsync, handleNotificationTap } from '../lib/notifications';
-import * as Sentry from '@sentry/react-native';
-
-// Navigation integration must be created before Sentry.init
-const navigationIntegration = Sentry.reactNavigationIntegration({
-  enableTimeToInitialDisplay: true,
-});
-
-Sentry.init({
-  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  environment: __DEV__ ? 'development' : 'production',
-  // Sample 20% of sessions for performance traces — full coverage for errors
-  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
-  integrations: [navigationIntegration],
-  sendDefaultPii: false,
-  // Don't enable in dev — Sentry's own logs pollute Metro output
-  enabled: !__DEV__,
-});
 
 SplashScreen.preventAutoHideAsync();
 
-export default Sentry.wrap(function RootLayout() {
+export default function RootLayout() {
   const navigationRef = useNavigationContainerRef();
-
-  useEffect(() => {
-    navigationIntegration.registerNavigationContainer(navigationRef);
-  }, []);
 
   // DEBUG: log every incoming deep link so we can see if berg:/// callback arrives
   useEffect(() => {
@@ -128,4 +107,4 @@ export default Sentry.wrap(function RootLayout() {
       </PostHogProvider>
     </ErrorBoundary>
   );
-});
+}
