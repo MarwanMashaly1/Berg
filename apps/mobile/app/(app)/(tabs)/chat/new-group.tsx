@@ -1,3 +1,15 @@
+// [align-4] This screen is hidden from navigation — standalone group chats are off-product.
+// See PRODUCT_NORTH_STAR.md. Re-enable if product scope changes.
+// The file is preserved so the route continues to exist without crashing any deep links.
+
+import { View } from 'react-native';
+
+export default function NewGroupModal() {
+  return <View />;
+}
+
+/* Original implementation preserved below — uncomment to restore:
+
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
@@ -112,7 +124,6 @@ export default function NewGroupModal() {
       style={[styles.container, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Header */}
       <View style={styles.header}>
         <BackButton variant="light" />
         <Text style={styles.headerTitle}>New Group Chat</Text>
@@ -129,7 +140,6 @@ export default function NewGroupModal() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {/* Group name input */}
       <TextInput
         style={styles.nameInput}
         value={groupName}
@@ -140,7 +150,6 @@ export default function NewGroupModal() {
         autoFocus
       />
 
-      {/* Selected chips */}
       {selected.length > 0 && (
         <View style={styles.chips}>
           {selected.map((p) => (
@@ -152,7 +161,6 @@ export default function NewGroupModal() {
         </View>
       )}
 
-      {/* Search bar */}
       <View style={styles.searchBar}>
         <MaterialIcons name="search" size={18} color={C.textTertiary} />
         <TextInput
@@ -167,7 +175,6 @@ export default function NewGroupModal() {
         )}
       </View>
 
-      {/* Section label */}
       {!isSearching && (
         <Text style={styles.sectionLabel}>
           {loadingFriends ? '' : friends.length > 0 ? 'YOUR CONNECTIONS' : ''}
@@ -256,3 +263,5 @@ const styles = StyleSheet.create({
   emptyFriendsTitle: { fontFamily: Fonts.heading, fontSize: 17, color: C.text, marginBottom: 6, fontStyle: 'italic' },
   emptyFriendsSub: { fontFamily: Fonts.body, fontSize: 13, color: C.textSecondary, textAlign: 'center' },
 });
+
+*/

@@ -126,17 +126,17 @@ export function MatchReveal({ visible, result, promptOption, onDismiss, onMakePl
 
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
-      onPanResponderRelease: (_, g) => { if (g.dy > 80) onDismiss(); },
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderRelease: (_, g) => { if (Math.abs(g.dy) > 80) onDismiss(); },
     }),
   ).current;
 
   return (
     <Modal visible={visible} animationType="fade" transparent statusBarTranslucent onRequestClose={onDismiss}>
-      <View style={styles.overlay}>
+      <View style={styles.overlay} {...pan.panHandlers}>
 
-        {/* Drag handle — only this area handles the swipe gesture */}
-        <View style={styles.dragHandle} {...pan.panHandlers}>
+        {/* Drag handle */}
+        <View style={styles.dragHandle}>
           <View style={styles.dragPill} />
         </View>
 

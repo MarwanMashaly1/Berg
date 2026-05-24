@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts } from '../../constants/theme';
 import { Avatar } from '../../components/ui/Avatar';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { getDiscoveryPeople, requestConnection, PersonSuggestion } from '../../lib/api';
+import { getDiscoveryPeople, triggerFofRecompute, requestConnection, PersonSuggestion } from '../../lib/api';
 
 const C = Colors.light;
 
@@ -88,8 +88,11 @@ export default function DiscoverPeopleScreen() {
 
   const load = useCallback(async () => {
     try {
-      const { people: p } = await getDiscoveryPeople();
+      const { people: p, lastComputedAt } = await getDiscoveryPeople();
       setPeople(p);
+      // Trigger background recompute if FOF data is stale (> 24h) or missing
+      const stale = !lastComputedAt || Date.now() - new Date(lastComputedAt).getTime() > 86_400_000;
+      if (stale) triggerFofRecompute().catch(() => {});
     } catch { /* keep existing */ }
     finally { setLoading(false); }
   }, []);
@@ -130,7 +133,7 @@ export default function DiscoverPeopleScreen() {
           !loading ? (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No suggestions yet</Text>
-              <Text style={styles.emptySub}>Connect with more people to see friend suggestions.</Text>
+              <Text style={styles.emptySub}>We haven&apos;t found any friends-of-friends you might know yet. Come back after you&apos;ve connected with more people.</Text>
             </View>
           ) : null
         }

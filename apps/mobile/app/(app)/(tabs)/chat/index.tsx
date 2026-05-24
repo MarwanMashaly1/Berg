@@ -166,12 +166,13 @@ export default function ChatListScreen() {
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.title}>Messages</Text>
-        <TouchableOpacity
+        {/* [align-4] New group chat button hidden — standalone group chats are off-product. See PRODUCT_NORTH_STAR.md. Re-enable if product scope changes. */}
+        {/* <TouchableOpacity
           style={styles.newBtn}
           onPress={() => router.push('/(app)/(tabs)/chat/new-group' as any)}
         >
           <MaterialIcons name="edit" size={20} color={C.primary} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       {loading ? (
@@ -186,14 +187,15 @@ export default function ChatListScreen() {
           </View>
           <Text style={styles.emptyTitle}>No chats yet</Text>
           <Text style={styles.emptySub}>
-            Confirm a motive to start a group chat, or create one below.
+            Confirm a motive to start a group chat, or send a direct message to a friend.
           </Text>
-          <TouchableOpacity
+          {/* [align-4] "Start a group chat" button hidden — standalone group chats are off-product. See PRODUCT_NORTH_STAR.md. Re-enable if product scope changes. */}
+          {/* <TouchableOpacity
             style={styles.newGroupBtn}
             onPress={() => router.push('/(app)/(tabs)/chat/new-group' as any)}
           >
             <Text style={styles.newGroupBtnText}>Start a group chat</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       ) : (
         <FlatList
