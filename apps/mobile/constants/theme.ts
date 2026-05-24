@@ -129,3 +129,5 @@ export const Shadow = {
 
 export type ColorScheme = 'light' | 'dark';
 export type ThemeColors = typeof Colors.light;
+
+export const C = Colors.light;

@@ -8,12 +8,10 @@ import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanima
 import Svg, { Defs, Mask, Rect, Circle as SvgCircle } from 'react-native-svg';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const CROP_D = SW * 0.82;
-
-const C = Colors.light;
 
 type Props = {
   visible: boolean;

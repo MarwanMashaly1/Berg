@@ -1,7 +1,6 @@
 import { View, StyleSheet } from 'react-native';
-import { Colors } from '../../constants/theme';
+import { C } from '../../constants/theme';
 
-const C = Colors.light;
 const TOTAL_STEPS = 6;
 
 type Props = { currentStep: number }; // 1-6

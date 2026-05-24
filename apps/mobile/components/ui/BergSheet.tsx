@@ -8,9 +8,7 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import { Colors, Fonts } from '../../constants/theme';
-
-const C = Colors.light;
+import { C, Fonts } from '../../constants/theme';
 
 export type SheetOption = {
   label: string;

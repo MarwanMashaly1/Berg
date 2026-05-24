@@ -1,8 +1,6 @@
 import { TouchableOpacity, View, StyleSheet, GestureResponderEvent } from 'react-native';
 import { router } from 'expo-router';
-import { Colors } from '../../constants/theme';
-
-const C = Colors.light;
+import { C } from '../../constants/theme';
 
 type Props = {
   /** 'light' for cream/white backgrounds, 'dark' for dark hero surfaces */
