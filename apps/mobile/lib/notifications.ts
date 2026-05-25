@@ -106,5 +106,27 @@ export function handleNotificationTap(notification: Notifications.Notification):
         } as any);
       }
       break;
+    // [align-1] Motive-mappable match: deep-link to motive creation pre-filled
+    case 'motive/create':
+      router.push({
+        pathname: '/(app)/(tabs)/motives/create',
+        params: {
+          prefillCategory: data.optionKey ?? undefined,
+          prefillUsers: data.suggestedAttendees
+            ? JSON.stringify((data.suggestedAttendees as unknown as string[]).map((id: string) => ({ id, name: null, username: null })))
+            : undefined,
+          originPromptId: data.promptId ?? undefined,
+        },
+      } as any);
+      break;
+    // [align-1] Conversational match: deep-link to match-detail view
+    case 'match-detail':
+      if (data.promptId) {
+        router.push({
+          pathname: '/(app)/match-detail',
+          params: { promptId: data.promptId, optionKey: data.optionKey ?? undefined },
+        } as any);
+      }
+      break;
   }
 }

@@ -1280,7 +1280,7 @@ function Step4({
 // ─── Main create screen ───────────────────────────────────────────────────────
 export default function CreateMotiveScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ prefillUsers?: string }>();
+  const params = useLocalSearchParams<{ prefillUsers?: string; prefillCategory?: string; originPromptId?: string }>();
   const [step, setStep] = useState(1);
   const TOTAL = 4;
 
@@ -1291,16 +1291,34 @@ export default function CreateMotiveScreen() {
   const [selectedCircles, setSelectedCircles] = useState<MyCircle[]>([]);
   const selectedIds = selectedPeople.map(p => p.id);
 
-  // Pre-fill from prompt CTA
+  // [align-1] Pre-fill from match notification (motive/create deep link)
+  // prefillCategory: optionKey from the match (maps to motive category)
+  // prefillUsers: JSON array of { id, name, username } to pre-invite
+  // originPromptId: stored on motive for funnel tracking (Item 2)
   useEffect(() => {
-    if (params.prefillUsers) {
+    const hasCat = params.prefillCategory && params.prefillCategory in CATEGORY_MAP;
+    const hasUsers = !!params.prefillUsers;
+
+    if (hasCat) {
+      setCategory(params.prefillCategory as CatKey);
+    }
+
+    if (hasUsers) {
       try {
-        const users = JSON.parse(params.prefillUsers) as Person[];
+        const users = JSON.parse(params.prefillUsers!) as Person[];
         if (Array.isArray(users) && users.length > 0) {
           setSelectedPeople(users);
-          setStep(3); // Skip to details — people already chosen
         }
       } catch {}
+    }
+
+    // Jump to the right step based on what was pre-filled
+    if (hasCat && hasUsers) {
+      setStep(3); // Category + people known — go straight to details
+    } else if (hasCat) {
+      setStep(2); // Category known — pick people
+    } else if (hasUsers) {
+      setStep(3); // Legacy: only users provided
     }
   }, []);
   // Step 3
@@ -1368,6 +1386,7 @@ export default function CreateMotiveScreen() {
           invitedUserIds: selectedIds,
           invitedCircleIds: selectedCircles.map(c => c.id),
           status: isDraft ? 'planning' : 'confirmed',
+          originPromptId: params.originPromptId ?? null,
         }),
       });
       trackMotiveCreated({

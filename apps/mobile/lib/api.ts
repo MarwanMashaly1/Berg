@@ -222,6 +222,32 @@ export function getPromptMatches(promptId: string) {
   return apiFetch<MatchResult>(`/api/prompts/${promptId}/matches`);
 }
 
+// [align-2] First-class match objects
+export type OpenMatch = {
+  id: string;
+  promptId: string;
+  optionKey: string;
+  status: 'pending' | 'viewed' | 'acted' | 'dismissed' | 'expired';
+  expiresAt: string;
+  createdAt: string;
+  prompt: { question: string; options: Array<{ key: string; emoji: string; text: string }> };
+  myAnswer: { key: string; emoji: string; text: string } | null;
+  theirAnswer: { key: string; emoji: string; text: string } | null;
+  friend: { id: string; name: string | null; avatarUrl: string | null };
+};
+
+export function getOpenMatches() {
+  return apiFetch<{ matches: OpenMatch[] }>('/api/matches');
+}
+
+export function dismissMatch(matchId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/matches/${matchId}/dismiss`, { method: 'POST' });
+}
+
+export function viewMatch(matchId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/matches/${matchId}/view`, { method: 'POST' });
+}
+
 export type PersonSuggestion = {
   id: string;
   name: string | null;
@@ -231,7 +257,11 @@ export type PersonSuggestion = {
 };
 
 export function getDiscoveryPeople() {
-  return apiFetch<{ people: PersonSuggestion[] }>('/api/discovery/people');
+  return apiFetch<{ people: PersonSuggestion[]; lastComputedAt: string | null }>('/api/discovery/people');
+}
+
+export function triggerFofRecompute() {
+  return apiFetch<{ queued: boolean }>('/api/discovery/people/recompute', { method: 'POST' });
 }
 
 export type CircleSuggestion = {
