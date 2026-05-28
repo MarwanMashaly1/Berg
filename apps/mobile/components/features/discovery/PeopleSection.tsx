@@ -1,12 +1,11 @@
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
+import { Routes } from '../../../lib/routes';
 import { PersonSuggestion } from '../../../lib/api';
 import { Avatar } from '../../ui/Avatar';
 import { SkeletonPersonCard } from '../../ui/Skeleton';
-
-const C = Colors.light;
 
 const MAX_VISIBLE = 6; // show at most 6 cards, then "See more →"
 
@@ -17,14 +16,7 @@ type Props = {
 
 function PersonCard({ person }: { person: PersonSuggestion }) {
   function handleTap() {
-    router.push({
-      pathname: '/(app)/user/[id]',
-      params: {
-        id: person.id,
-        name: person.name ?? '',
-        avatarUrl: person.avatarUrl ?? '',
-      },
-    } as any);
+    router.push(Routes.userProfile(person.id, person.name ?? '', person.avatarUrl ?? ''));
   }
 
   return (
@@ -63,7 +55,7 @@ function SeeMoreCard({ count }: { count: number }) {
   return (
     <TouchableOpacity
       style={styles.seeMoreCard}
-      onPress={() => router.push('/(app)/discover-people' as any)}
+      onPress={() => router.push(Routes.discoverPeople)}
       activeOpacity={0.82}
     >
       <View style={styles.seeMoreIcon}>
@@ -104,7 +96,7 @@ export function PeopleSection({ people, loading }: Props) {
       <View style={styles.header}>
         <Text style={styles.title}>People you might know</Text>
         {people.length > MAX_VISIBLE && (
-          <TouchableOpacity onPress={() => router.push('/(app)/discover-people' as any)}>
+          <TouchableOpacity onPress={() => router.push(Routes.discoverPeople)}>
             <Text style={styles.seeAllLink}>See all {people.length}</Text>
           </TouchableOpacity>
         )}

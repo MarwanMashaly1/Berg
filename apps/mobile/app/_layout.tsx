@@ -4,6 +4,10 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Stack, useNavigationContainerRef, usePathname } from 'expo-router';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { initSentry, Sentry } from '../lib/sentry';
+
+// Initialize before anything else — defensive, never throws
+initSentry();
 
 // Suppress all dev overlays — Sentry captures everything
 LogBox.ignoreAllLogs();
@@ -34,12 +38,13 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { queryClient, savePushToken } from '../lib/api';
+import { log } from '../lib/logger';
 import { Colors } from '../constants/theme';
 import { registerForPushNotificationsAsync, handleNotificationTap } from '../lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootLayout() {
   const navigationRef = useNavigationContainerRef();
 
   // DEBUG: log every incoming deep link so we can see if berg:/// callback arrives
@@ -68,9 +73,9 @@ export default function RootLayout() {
 
     registerForPushNotificationsAsync()
       .then((token) => {
-        if (token) savePushToken(token).catch(() => {});
+        if (token) savePushToken(token).catch((err) => log.warn('push token save failed', err));
       })
-      .catch(() => {});
+      .catch((err) => log.warn('push notification registration failed', err));
 
     // Handle notification taps while app is foregrounded or in background
     const tapSub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -95,7 +100,7 @@ export default function RootLayout() {
       <PostHogProvider client={posthog}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <QueryClientProvider client={queryClient}>
-            <StatusBar style="dark" backgroundColor={Colors.light.backgroundWarm} translucent={false} />
+            <StatusBar style="auto" backgroundColor={Colors.light.backgroundWarm} translucent={false} />
             <Stack ref={navigationRef} screenOptions={{ headerShown: false, animation: 'fade' }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" options={{ animation: 'slide_from_bottom' }} />
@@ -108,3 +113,5 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayout);

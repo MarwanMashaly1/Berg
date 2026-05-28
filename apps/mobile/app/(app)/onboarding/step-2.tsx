@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { getVibeTags, getUserVibeTags, postUserVibeTags, patchUser } from '../../../lib/api';
-
-const C = Colors.light;
 
 type VibeTag = { id: string; label: string; emoji: string; category: string };
 

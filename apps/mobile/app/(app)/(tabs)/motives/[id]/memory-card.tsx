@@ -10,13 +10,12 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Shadow } from '../../../../../constants/theme';
+import { C, Fonts, Shadow } from '../../../../../constants/theme';
 import { CATEGORY_MAP } from '../../../../../constants/motives';
 import { Avatar } from '../../../../../components/ui/Avatar';
 import { getMotive, getMemory, Motive, MotiveMemory } from '../../../../../lib/api';
 import { BackButton } from '../../../../../components/ui/BackButton';
 
-const C = Colors.light;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const PHOTO_COLORS = ['#3A6EA8', '#7B5EA7', '#2EC4B6', '#C84B7A', '#E08040', '#4CAF81'];

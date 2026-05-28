@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 import { Avatar } from '../../components/ui/Avatar';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { getDiscoveryPeople, triggerFofRecompute, requestConnection, PersonSuggestion } from '../../lib/api';
-
-const C = Colors.light;
+import { QK } from '../../lib/hooks/queries';
+import { log } from '../../lib/logger';
 
 function PersonCard({ person }: { person: PersonSuggestion }) {
   const [connecting, setConnecting] = useState(false);
@@ -82,39 +84,23 @@ function SkeletonRow() {
 
 export default function DiscoverPeopleScreen() {
   const insets = useSafeAreaInsets();
-  const [people, setPeople]       = useState<PersonSuggestion[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const { people: p, lastComputedAt } = await getDiscoveryPeople();
-      setPeople(p);
+  const { data, isLoading: loading, isRefetching, refetch } = useQuery({
+    queryKey: QK.discovery(),
+    queryFn: async () => {
+      const result = await getDiscoveryPeople();
       // Trigger background recompute if FOF data is stale (> 24h) or missing
-      const stale = !lastComputedAt || Date.now() - new Date(lastComputedAt).getTime() > 86_400_000;
-      if (stale) triggerFofRecompute().catch(() => {});
-    } catch { /* keep existing */ }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }
+      const stale = !result.lastComputedAt || Date.now() - new Date(result.lastComputedAt).getTime() > 86_400_000;
+      if (stale) triggerFofRecompute().catch((err: unknown) => log.warn('fof recompute trigger failed', { error: String(err) }));
+      return result;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const people = data?.people ?? [];
 
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <View style={styles.chevron} />
-        </TouchableOpacity>
-        <Text style={styles.title}>People you might know</Text>
-        <View style={{ width: 36 }} />
-      </View>
+    <View style={styles.safe}>
+      <ScreenHeader title="People you might know" />
 
       <FlatList
         data={loading ? Array.from({ length: 8 }) : people}
@@ -122,7 +108,7 @@ export default function DiscoverPeopleScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24, paddingTop: 4 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />
+          <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={C.primary} />
         }
         renderItem={({ item }) =>
           loading
@@ -144,37 +130,6 @@ export default function DiscoverPeopleScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-    paddingTop: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.background,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: C.surface,
-    borderWidth: 1, borderColor: C.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  chevron: {
-    width: 9, height: 9,
-    borderLeftWidth: 2, borderBottomWidth: 2,
-    borderColor: C.textSecondary,
-    transform: [{ rotate: '45deg' }],
-    marginLeft: 3,
-  },
-  title: {
-    fontFamily: Fonts.heading,
-    fontSize: 17,
-    color: C.text,
-    fontStyle: 'italic',
-    letterSpacing: -0.3,
-  },
 
   // Person card
   card: {

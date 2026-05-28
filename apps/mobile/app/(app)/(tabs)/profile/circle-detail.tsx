@@ -6,18 +6,17 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { C, Fonts } from '../../../../constants/theme';
+import { Routes } from '../../../../lib/routes';
 import {
   getCircleDetail, joinCircle, approveMember, removeMember,
   getCircleMemories, CircleDetail, CircleMember, CirclePhoto,
 } from '../../../../lib/api';
 import { Avatar } from '../../../../components/ui/Avatar';
-import { BackButton } from '../../../../components/ui/BackButton';
+import { ScreenHeader } from '../../../../components/ui/ScreenHeader';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_W - 28 - 8) / 3;
-
-const C = Colors.light;
 
 export default function CircleDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -134,10 +133,8 @@ export default function CircleDetailScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.safe, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <BackButton variant="light" />
-        </View>
+      <View style={styles.safe}>
+        <ScreenHeader title="" />
         <View style={styles.loadingState}>
           <Text style={styles.loadingText}>Loading…</Text>
         </View>
@@ -147,10 +144,8 @@ export default function CircleDetailScreen() {
 
   if (!circle) {
     return (
-      <View style={[styles.safe, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <BackButton variant="light" />
-        </View>
+      <View style={styles.safe}>
+        <ScreenHeader title="" />
         <View style={styles.loadingState}>
           <Text style={styles.loadingText}>Circle not found.</Text>
         </View>
@@ -163,17 +158,15 @@ export default function CircleDetailScreen() {
   const isMember = myStatus === 'active';
 
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <BackButton variant="light" />
-        {isAdmin && (
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: '/(app)/(tabs)/profile/edit-circle', params: { id: circle.id } } as any)}
-          >
+    <View style={styles.safe}>
+      <ScreenHeader
+        title={circle.name}
+        right={isAdmin ? (
+          <TouchableOpacity onPress={() => router.push(Routes.profileEditCircle(circle.id))}>
             <Text style={styles.editBtn}>Edit</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        ) : undefined}
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -286,10 +279,6 @@ export default function CircleDetailScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.background },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 18, paddingBottom: 8,
-  },
   editBtn: { fontFamily: Fonts.bodySemiBold, fontSize: 13, color: C.primary },
   loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontFamily: Fonts.body, fontSize: 13, color: C.textTertiary },

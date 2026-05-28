@@ -5,11 +5,11 @@ import * as SecureStore from 'expo-secure-store';
 import { getSetCookie } from '@better-auth/expo/client';
 import { authClient } from '../../lib/auth';
 import { identifyUser } from '../../lib/analytics';
-import { Colors, Fonts } from '../../constants/theme';
+import { log } from '../../lib/logger';
+import { C, Fonts } from '../../constants/theme';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-
-const C = Colors.light;
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { Routes } from '../../lib/routes';
+import { Config } from '../../lib/config';
 
 // Key that BetterAuth's Expo plugin uses to store the session cookie.
 // Derived from: storagePrefix + '_cookie' (see expoClient config: storagePrefix: 'berg')
@@ -34,9 +34,9 @@ export default function MagicLinkCallbackScreen() {
       if (!user?.onboardingCompleted) {
         const step = parseInt(user?.onboardingStep ?? '0', 10);
         const nextStep = Math.min(step + 1, 6);
-        router.replace(`/(app)/onboarding/step-${nextStep}` as any);
+        router.replace(Routes.onboarding(nextStep as 1|2|3|4|5|6));
       } else {
-        router.replace('/(app)/(tabs)/discovery');
+        router.replace(Routes.discovery);
       }
     } else {
       router.replace({ pathname: '/(auth)/signup', params: { error: 'link_expired' } });
@@ -45,49 +45,44 @@ export default function MagicLinkCallbackScreen() {
 
   async function verifyAndLogin(t: string) {
     try {
-      console.log('[magic-link] verifyAndLogin start, token length:', t.length);
-      const res = await fetch(`${API_URL}/api/auth/verify-code`, {
+      log.info('magic-link: verifyAndLogin start');
+      const res = await fetch(`${Config.apiUrl}/api/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: t }),
       });
 
-      console.log('[magic-link] verify-code response status:', res.status);
+      log.info('magic-link: verify-code response', { status: res.status });
       if (!res.ok) throw new Error(`Verification failed: ${res.status}`);
 
       const data = await res.json() as { setCookie?: string; error?: string };
-      console.log('[magic-link] setCookie present:', !!data.setCookie, '| error:', data.error);
-
       if (!data.setCookie) throw new Error('No session cookie returned');
 
       // Start fresh — passing '{}' prevents stale session_data from a previous login
       // contaminating the new session via BetterAuth's cookieCache
       const cookieJson = getSetCookie(data.setCookie, '{}');
-      console.log('[magic-link] cookieJson length:', cookieJson?.length);
       SecureStore.setItem(COOKIE_STORAGE_KEY, cookieJson);
 
       // Trigger session atom to re-fetch so useSession() in all layouts updates
       (authClient as any).$store.notify('$sessionSignal');
 
       const sessionResult = await authClient.getSession();
-      console.log('[magic-link] getSession result:', sessionResult.data ? 'HAS SESSION' : 'NO SESSION', '| error:', sessionResult.error);
       if (!sessionResult.data) throw new Error('Session not found after verify');
 
       const user = sessionResult.data.user as any;
-      console.log('[magic-link] user.id:', user.id, '| onboardingCompleted:', user.onboardingCompleted);
       identifyUser(user.id, { name: user.name, email: user.email });
 
       if (!user?.onboardingCompleted) {
         const step = parseInt(user?.onboardingStep ?? '0', 10);
         const nextStep = Math.min(step + 1, 6);
-        console.log('[magic-link] navigating to onboarding step', nextStep);
-        router.replace(`/(app)/onboarding/step-${nextStep}` as any);
+        log.info('magic-link: routing to onboarding', { step: nextStep });
+        router.replace(Routes.onboarding(nextStep as 1|2|3|4|5|6));
       } else {
-        console.log('[magic-link] navigating to discovery');
-        router.replace('/(app)/(tabs)/discovery');
+        log.info('magic-link: routing to discovery');
+        router.replace(Routes.discovery);
       }
     } catch (err) {
-      console.error('[magic-link] Verification error:', err);
+      log.error('magic-link: verification failed', err);
       router.replace({ pathname: '/(auth)/signup', params: { error: 'link_expired' } });
     }
   }

@@ -1,24 +1,25 @@
 import { useEffect } from 'react';
 import { Stack, router } from 'expo-router';
-import { authClient } from '../../lib/auth';
+import { useCurrentUser } from '../../hooks/use-current-user';
+import { Routes } from '../../lib/routes';
 
 export default function AuthLayout() {
-  const { data: session, isPending } = authClient.useSession();
+  const { user, isPending } = useCurrentUser();
 
   useEffect(() => {
-    if (isPending || !session) return;
+    if (isPending || !user) return;
 
-    const user = session.user as any;
-    const onboardingCompleted = user?.onboardingCompleted ?? false;
+    const userAny = user as any;
+    const onboardingCompleted = userAny?.onboardingCompleted ?? false;
 
     if (!onboardingCompleted) {
-      const step = parseInt(user?.onboardingStep ?? '0', 10);
+      const step = parseInt(userAny?.onboardingStep ?? '0', 10);
       const nextStep = Math.min(step + 1, 6);
-      router.replace(`/(app)/onboarding/step-${nextStep}` as any);
+      router.replace(Routes.onboarding(nextStep as 1|2|3|4|5|6));
     } else {
-      router.replace('/(app)/(tabs)/discovery');
+      router.replace(Routes.discovery);
     }
-  }, [session, isPending]);
+  }, [user, isPending]);
 
   return (
     <Stack

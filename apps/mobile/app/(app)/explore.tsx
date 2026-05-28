@@ -3,12 +3,10 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } 
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 import { getDiscoveryPeople, getDiscoveryCircles, PersonSuggestion, CircleSuggestion } from '../../lib/api';
 import { PeopleSection } from '../../components/features/discovery/PeopleSection';
 import { CirclesSection } from '../../components/features/discovery/CirclesSection';
-
-const C = Colors.light;
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();

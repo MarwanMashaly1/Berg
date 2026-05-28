@@ -6,7 +6,7 @@ import { db } from '../db';
 import { pendingPhone, users } from '@berg/shared';
 import { randomUUID } from 'crypto';
 import { eq, and, gt } from 'drizzle-orm';
-import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
+import { rateLimit, API_LIMITS } from '../lib/rate-limiter.js';
 import { auth } from '../auth.js';
 
 export const phoneRoutes = new Hono();
@@ -32,11 +32,8 @@ phoneRoutes.post('/start', zValidator('json', startSchema), async (c) => {
   }
 
   // Rate limit: 5 SMS per phone number per hour (prevents SMS flooding)
-  const rl = rateLimiter.check(`phone:${e164}`, API_LIMITS.phoneStart.limit, API_LIMITS.phoneStart.windowMs);
-  if (!rl.allowed) {
-    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
-    return c.json({ error: 'Too many requests. Try again later.' }, 429);
-  }
+  const limited = rateLimit(c, `phone:${e164}`, API_LIMITS.phoneStart.limit, API_LIMITS.phoneStart.windowMs);
+  if (limited) return limited;
 
   const sessionId = randomUUID();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes

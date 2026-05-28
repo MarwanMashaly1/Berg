@@ -1,18 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Modal,
-  ScrollView, Alert, Image as RNImage, RefreshControl, useWindowDimensions,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
+  ScrollView, Alert, RefreshControl,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import Animated, {
-  useSharedValue, useAnimatedStyle,
-  withRepeat, withSequence, withTiming, withDelay,
-} from 'react-native-reanimated';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { Colors, Fonts } from '../../../../constants/theme';
 import {
@@ -20,12 +15,15 @@ import {
   renameGroupChat, getChatImageUploadUrl,
 } from '../../../../lib/api';
 import { supabase } from '../../../../lib/supabase';
-import { authClient } from '../../../../lib/auth';
-import { Avatar } from '../../../../components/ui/Avatar';
+import { useCurrentUser } from '../../../../hooks/use-current-user';
+import { log } from '../../../../lib/logger';
 import { BackButton } from '../../../../components/ui/BackButton';
+import { GifModal } from '../../../../components/chat/GifModal';
+import { RenameModal } from '../../../../components/chat/RenameModal';
+import { MessageBubble } from '../../../../components/chat/MessageBubble';
+import { TypingIndicator } from '../../../../components/chat/TypingIndicator';
 
 const C = Colors.light;
-const TENOR_KEY = process.env.EXPO_PUBLIC_TENOR_API_KEY ?? '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -115,316 +113,6 @@ const ep = StyleSheet.create({
   emoji: { fontSize: 26 },
 });
 
-// ── GIF search modal ──────────────────────────────────────────────────────────
-
-type TenorGif = { id: string; url: string; preview: string };
-
-function GifModal({
-  visible,
-  onClose,
-  onPick,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onPick: (url: string) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const [gifs, setGifs] = useState<TenorGif[]>([]);
-  const [loading, setLoading] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  async function search(q: string) {
-    if (!TENOR_KEY) return;
-    setLoading(true);
-    try {
-      const endpoint = q.trim()
-        ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&key=${TENOR_KEY}&limit=24&media_filter=gif,tinygif`
-        : `https://tenor.googleapis.com/v2/featured?key=${TENOR_KEY}&limit=24&media_filter=gif,tinygif`;
-      const res = await fetch(endpoint);
-      const json = await res.json();
-      const results: TenorGif[] = (json.results ?? []).map((r: any) => ({
-        id: r.id,
-        url: r.media_formats?.gif?.url ?? '',
-        preview: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url ?? '',
-      }));
-      setGifs(results.filter(g => g.url));
-    } catch { /* ignore */ } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (visible) search('');
-  }, [visible]);
-
-  function handleQueryChange(val: string) {
-    setQuery(val);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => search(val), 400);
-  }
-
-  const insets = useSafeAreaInsets();
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={[gm.sheet, { paddingBottom: insets.bottom }]}>
-        <View style={gm.handle} />
-
-        <View style={gm.searchRow}>
-          <MaterialIcons name="search" size={18} color={C.textTertiary} style={{ marginLeft: 10 }} />
-          <TextInput
-            style={gm.input}
-            value={query}
-            onChangeText={handleQueryChange}
-            placeholder="Search GIFs…"
-            placeholderTextColor={C.textTertiary}
-            autoFocus
-          />
-          <TouchableOpacity onPress={onClose} style={gm.closeBtn}>
-            <MaterialIcons name="close" size={18} color={C.textTertiary} />
-          </TouchableOpacity>
-        </View>
-
-        {!TENOR_KEY ? (
-          <View style={gm.empty}>
-            <Text style={gm.emptyTxt}>Add EXPO_PUBLIC_TENOR_API_KEY to .env to enable GIFs</Text>
-          </View>
-        ) : loading ? (
-          <View style={gm.empty}><ActivityIndicator color={C.primary} /></View>
-        ) : (
-          <FlatList
-            data={gifs}
-            numColumns={2}
-            keyExtractor={g => g.id}
-            contentContainerStyle={{ padding: 8, gap: 6 }}
-            columnWrapperStyle={{ gap: 6 }}
-            renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => { onPick(item.url); onClose(); }} style={gm.gifCell}>
-                <Image source={{ uri: item.preview }} style={gm.gifImg} contentFit="cover" />
-              </TouchableOpacity>
-            )}
-          />
-        )}
-      </View>
-    </Modal>
-  );
-}
-
-const gm = StyleSheet.create({
-  sheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    height: '75%', backgroundColor: C.surface,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1, shadowRadius: 12, elevation: 16,
-  },
-  handle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: C.border, alignSelf: 'center', marginTop: 10, marginBottom: 8,
-  },
-  searchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    margin: 12, backgroundColor: C.surfaceAlt, borderRadius: 12,
-  },
-  input: {
-    flex: 1, fontFamily: Fonts.body, fontSize: 14, color: C.text,
-    paddingVertical: 10, paddingHorizontal: 8,
-  },
-  closeBtn: { padding: 10 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  emptyTxt: { fontFamily: Fonts.body, fontSize: 13, color: C.textSecondary, textAlign: 'center' },
-  gifCell: { flex: 1, aspectRatio: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: C.surfaceAlt },
-  gifImg: { width: '100%', height: '100%' },
-});
-
-// ── Rename modal ──────────────────────────────────────────────────────────────
-
-function RenameModal({
-  visible,
-  currentName,
-  onClose,
-  onSave,
-}: {
-  visible: boolean;
-  currentName: string;
-  onClose: () => void;
-  onSave: (name: string) => void;
-}) {
-  const [value, setValue] = useState(currentName);
-  useEffect(() => { if (visible) setValue(currentName); }, [visible, currentName]);
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={rm.overlay}>
-        <View style={rm.card}>
-          <Text style={rm.title}>Rename group</Text>
-          <TextInput
-            style={rm.input}
-            value={value}
-            onChangeText={setValue}
-            placeholder="Group name"
-            placeholderTextColor={C.textTertiary}
-            maxLength={60}
-            autoFocus
-            selectTextOnFocus
-          />
-          <View style={rm.row}>
-            <TouchableOpacity onPress={onClose} style={rm.cancelBtn}>
-              <Text style={rm.cancelTxt}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => value.trim() && onSave(value.trim())}
-              style={[rm.saveBtn, !value.trim() && rm.saveBtnDisabled]}
-              disabled={!value.trim()}
-            >
-              <Text style={rm.saveTxt}>Save</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const rm = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  card: { backgroundColor: C.surface, borderRadius: 16, padding: 20, width: '80%', gap: 16 },
-  title: { fontFamily: Fonts.bodySemiBold, fontSize: 16, color: C.text, textAlign: 'center' },
-  input: {
-    fontFamily: Fonts.body, fontSize: 15, color: C.text,
-    backgroundColor: C.surfaceAlt, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 11,
-    borderWidth: 1, borderColor: C.border,
-  },
-  row: { flexDirection: 'row', gap: 10 },
-  cancelBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10, backgroundColor: C.surfaceAlt },
-  cancelTxt: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: C.textSecondary },
-  saveBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10, backgroundColor: C.primary },
-  saveBtnDisabled: { backgroundColor: C.border },
-  saveTxt: { fontFamily: Fonts.bodySemiBold, fontSize: 14, color: C.textInverse },
-});
-
-// ── Message bubble ────────────────────────────────────────────────────────────
-
-function MessageBubble({ msg, isMe, showTime, showSenderName }: {
-  msg: ChatMessage; isMe: boolean; showTime: boolean; showSenderName: boolean;
-}) {
-  const { width: screenWidth } = useWindowDimensions();
-  const mediaWidth = Math.min(220, screenWidth * 0.58);
-  const mediaHeight = Math.round(mediaWidth * (180 / 220));
-  const isImage = msg.type === 'image';
-  const isGif = msg.type === 'gif';
-  const isMedia = isImage || isGif;
-
-  return (
-    <View style={[styles.bubbleWrap, isMe ? styles.bubbleWrapMe : styles.bubbleWrapThem]}>
-      {!isMe && (
-        <View style={styles.bubbleWithAvatar}>
-          <Avatar
-            name={msg.senderName}
-            userId={msg.senderId}
-            uri={msg.senderImage ?? undefined}
-            size="xs"
-            style={{ marginRight: 6, alignSelf: 'flex-end', opacity: showTime ? 1 : 0 }}
-          />
-          <View style={styles.bubbleContent}>
-            {showSenderName && (
-              <Text style={styles.senderName}>{msg.senderName?.split(' ')[0] ?? 'Someone'}</Text>
-            )}
-            {isMedia ? (
-              <View style={[styles.mediaBubble, styles.mediaBubbleThem]}>
-                <Image
-                  source={{ uri: msg.content }}
-                  style={{ width: mediaWidth, height: mediaHeight }}
-                  contentFit="cover"
-                  transition={200}
-                />
-              </View>
-            ) : (
-              <View style={[styles.bubble, styles.bubbleThem]}>
-                <Text style={[styles.bubbleText, styles.bubbleTextThem]}>
-                  {msg.content}
-                </Text>
-              </View>
-            )}
-            {showTime && (
-              <Text style={[styles.timeLabel, styles.timeLabelThem]}>
-                {formatTime(msg.createdAt)}
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-      {isMe && (
-        <>
-          {isMedia ? (
-            <View style={[styles.mediaBubble, styles.mediaBubbleMe]}>
-              <Image
-                source={{ uri: msg.content }}
-                style={{ width: mediaWidth, height: mediaHeight }}
-                contentFit="cover"
-                transition={200}
-              />
-            </View>
-          ) : (
-            <View style={[styles.bubble, styles.bubbleMe]}>
-              <Text style={[styles.bubbleText, styles.bubbleTextMe]}>
-                {msg.content}
-              </Text>
-            </View>
-          )}
-          {showTime && (
-            <Text style={[styles.timeLabel, styles.timeLabelMe]}>
-              {formatTime(msg.createdAt)}
-            </Text>
-          )}
-        </>
-      )}
-    </View>
-  );
-}
-
-// ── Typing indicator ──────────────────────────────────────────────────────────
-
-function AnimatedDot({ delay }: { delay: number }) {
-  const opacity = useSharedValue(1);
-
-  useEffect(() => {
-    opacity.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(
-          withTiming(0.3, { duration: 400 }),
-          withTiming(1, { duration: 400 }),
-        ),
-        -1,
-        false,
-      ),
-    );
-  }, [delay, opacity]);
-
-  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  return <Animated.View style={[styles.typingDot, animStyle]} />;
-}
-
-function TypingIndicator({ names }: { names: string[] }) {
-  if (names.length === 0) return null;
-  const label = names.length === 1
-    ? `${names[0]} is typing…`
-    : `${names.slice(0, 2).join(', ')} are typing…`;
-  return (
-    <View style={styles.typingRow}>
-      <View style={styles.typingDots}>
-        <AnimatedDot delay={0} />
-        <AnimatedDot delay={200} />
-        <AnimatedDot delay={400} />
-      </View>
-      <Text style={styles.typingText}>{label}</Text>
-    </View>
-  );
-}
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 type PresenceState = Record<string, Array<{ userId: string; name: string; typing: boolean }>>;
@@ -434,9 +122,9 @@ export default function ChatRoomScreen() {
     id: string; name?: string; type?: string;
   }>();
   const insets = useSafeAreaInsets();
-  const { data: session } = authClient.useSession();
-  const myId = session?.user?.id ?? '';
-  const myName = session?.user?.name ?? 'Me';
+  const { user } = useCurrentUser();
+  const myId = user?.id ?? '';
+  const myName = user?.name ?? 'Me';
   const isGroup = chatType === 'group';
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -467,7 +155,9 @@ export default function ChatRoomScreen() {
       const data = await getChatMessages(chatId);
       setMessages(data.messages);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      log.error('chat load history failed', err);
+    } finally {
       setLoading(false);
     }
   }, [chatId]);
@@ -598,7 +288,8 @@ export default function ChatRoomScreen() {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
       // Broadcast to other members so they get live updates without postgres_changes config
       channelRef.current?.send({ type: 'broadcast', event: 'new_message', payload: message });
-    } catch {
+    } catch (err) {
+      log.error('chat send failed', err);
       if (type === 'text') {
         setOptimistic(prev => prev.map(m => m.localId === id ? { ...m, status: 'failed' } : m));
       }
@@ -879,30 +570,16 @@ const styles = StyleSheet.create({
   daySepLine: { flex: 1, height: 1, backgroundColor: C.border },
   daySepText: { fontFamily: Fonts.body, fontSize: 11, color: C.textTertiary, paddingHorizontal: 4 },
 
+  // Optimistic bubble styles (real MessageBubble has its own stylesheet)
   bubbleWrap: { marginBottom: 6, maxWidth: '82%' },
   bubbleWrapMe: { alignSelf: 'flex-end', alignItems: 'flex-end' },
-  bubbleWrapThem: { alignSelf: 'flex-start', alignItems: 'flex-start' },
-  bubbleWithAvatar: { flexDirection: 'row', alignItems: 'flex-end' },
-  bubbleContent: { flexDirection: 'column', alignItems: 'flex-start' },
-  senderName: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: C.textSecondary, marginBottom: 2, marginLeft: 4 },
   bubble: { borderRadius: 18, paddingVertical: 9, paddingHorizontal: 14 },
   bubbleMe: { backgroundColor: C.primary, borderBottomRightRadius: 4 },
   bubbleFailed: { backgroundColor: 'rgba(230,57,70,0.15)', borderWidth: 1, borderColor: 'rgba(230,57,70,0.4)' },
-  bubbleThem: { backgroundColor: '#FFFFFF', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)' },
   bubbleText: { fontFamily: Fonts.body, fontSize: 14, lineHeight: 20 },
   bubbleTextMe: { color: C.textInverse },
-  bubbleTextThem: { color: C.text },
-  mediaBubble: { borderRadius: 12, overflow: 'hidden' },
-  mediaBubbleMe: { borderBottomRightRadius: 4 },
-  mediaBubbleThem: { borderBottomLeftRadius: 4 },
   timeLabel: { fontFamily: Fonts.body, fontSize: 11, color: C.textTertiary, marginTop: 2 },
   timeLabelMe: { textAlign: 'right', marginRight: 4 },
-  timeLabelThem: { marginLeft: 4 },
-
-  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingVertical: 6 },
-  typingDots: { flexDirection: 'row', gap: 3 },
-  typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary },
-  typingText: { fontFamily: Fonts.body, fontSize: 11, color: C.textSecondary, fontStyle: 'italic' },
 
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 4,

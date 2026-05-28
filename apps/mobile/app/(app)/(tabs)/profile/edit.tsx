@@ -5,12 +5,13 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { authClient } from '../../../../lib/auth';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { useCurrentUser } from '../../../../hooks/use-current-user';
+import { C, Fonts } from '../../../../constants/theme';
+import { Routes } from '../../../../lib/routes';
 import { patchUser, getUserMe } from '../../../../lib/api';
 import { pickAndUploadAvatar, takeAndUploadAvatar } from '../../../../lib/avatar';
+import { log } from '../../../../lib/logger';
 
-const C = Colors.light;
 const AVAIL_OPTIONS = [
   { value: 'down_to_hang', emoji: '🟢', label: 'Down to hang', color: '#2D6A4F', bg: 'rgba(45,106,79,0.12)' },
   { value: 'ask_me',       emoji: '🟡', label: 'Ask me',       color: '#B7791F', bg: 'rgba(183,121,31,0.12)' },
@@ -19,8 +20,8 @@ const AVAIL_OPTIONS = [
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { data: session } = authClient.useSession();
-  const user = session?.user as any;
+  const { user: currentUser } = useCurrentUser();
+  const user = currentUser as any;
 
   const [name, setName] = useState<string>(user?.displayName ?? user?.name ?? '');
   const [username, setUsername] = useState<string>(user?.username ?? '');
@@ -39,7 +40,7 @@ export default function EditProfileScreen() {
       setBio(u.bio ?? '');
       setAvailability(u.availabilityStatus ?? 'down_to_hang');
       if (u.image) setAvatarUri(u.image);
-    }).catch(() => {});
+    }).catch((err) => { log.error('profile load failed', err); Alert.alert('Something went wrong', 'Please try again.'); });
   }, []);
 
   function showAvatarPicker() {
@@ -157,7 +158,7 @@ export default function EditProfileScreen() {
             ))}
           </View>
           <Text style={styles.sectionLabel}>VIBE TAGS</Text>
-          <TouchableOpacity style={styles.vibeRow} onPress={() => router.push({ pathname: '/(app)/onboarding/step-2', params: { returnTo: 'profile' } } as any)}>
+          <TouchableOpacity style={styles.vibeRow} onPress={() => router.push(Routes.onboardingEditVibes)}>
             <Text style={{ fontFamily: Fonts.body, fontSize: 12, color: C.text, flex: 1 }}>Edit your interests</Text>
             <Text style={{ fontFamily: Fonts.bodySemiBold, fontSize: 11, color: C.primary }}>Edit →</Text>
           </TouchableOpacity>

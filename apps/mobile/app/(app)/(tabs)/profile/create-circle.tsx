@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, Share, KeyboardAvoidingView, Platform, Image,
+  ScrollView, Switch, Share, KeyboardAvoidingView, Platform, Image, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { C, Fonts } from '../../../../constants/theme';
 import { createCircle, uploadCircleImage } from '../../../../lib/api';
 import { CATEGORIES } from '../../../../constants/motives';
-
-const C = Colors.light;
+import { log } from '../../../../lib/logger';
 
 // Emoji picker: category emojis first, then extras for non-category circles
 const CAT_EMOJIS = CATEGORIES.map((c) => c.emoji);
@@ -84,7 +83,7 @@ export default function CreateCircleScreen() {
       });
       // Upload cover image if one was selected
       if (coverImageUri) {
-        await uploadCircleImage(result.id, coverImageUri, coverImageMime).catch(() => {});
+        await uploadCircleImage(result.id, coverImageUri, coverImageMime).catch((err: unknown) => { log.warn('circle image upload failed', { error: String(err) }); Alert.alert('Something went wrong', 'Please try again.'); });
       }
       setCreatedId(result.id);
       setJoinCode(result.joinCode);

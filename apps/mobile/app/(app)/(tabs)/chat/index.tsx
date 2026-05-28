@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { C, Fonts } from '../../../../constants/theme';
+import { Routes } from '../../../../lib/routes';
 import { getChats, ChatListItem } from '../../../../lib/api';
 import { supabase } from '../../../../lib/supabase';
-import { authClient } from '../../../../lib/auth';
+import { useCurrentUser } from '../../../../hooks/use-current-user';
 import { Avatar } from '../../../../components/ui/Avatar';
 import { SkeletonChatRow } from '../../../../components/ui/Skeleton';
-
-const C = Colors.light;
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -96,19 +95,22 @@ function ChatRow({ item, onPress }: { item: ChatListItem; onPress: () => void })
 
 export default function ChatListScreen() {
   const insets = useSafeAreaInsets();
-  const { data: session } = authClient.useSession();
-  const myId = session?.user?.id;
+  const { user } = useCurrentUser();
+  const myId = user?.id;
 
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const data = await getChats();
       setChats(data.chats);
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      if (!silent) Alert.alert('Could not load chats', 'Pull down to try again.');
+      console.error('[chat] load failed:', err);
+    } finally {
       setLoading(false);
     }
   }, []);
@@ -121,8 +123,8 @@ export default function ChatListScreen() {
 
   // Reload on focus + refresh timestamps every 60s while screen is active
   useFocusEffect(useCallback(() => {
-    load();
-    const timer = setInterval(load, 60_000);
+    load(true); // silent on background focus
+    const timer = setInterval(() => load(true), 60_000);
     return () => clearInterval(timer);
   }, [load]));
 
@@ -134,8 +136,15 @@ export default function ChatListScreen() {
     // Subscribe to any new message INSERT — refresh the list when one arrives
     // in any chat the user belongs to. We can't filter by membership here,
     // so we reload from API (which already filters to user's chats).
+    // Remove any existing channel before resubscribing (guards against React
+    // reconnecting offscreen effects without running cleanup first).
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     const channel = supabase
-      .channel(`chat-list:${myId}`)
+      .channel(`chat-list:${myId}-${Date.now()}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
@@ -205,10 +214,7 @@ export default function ChatListScreen() {
             <ChatRow
               item={item}
               onPress={() =>
-                router.push({
-                  pathname: '/(app)/(tabs)/chat/[id]',
-                  params: { id: item.id, name: item.name ?? undefined },
-                } as any)
+                router.push(Routes.chat(item.id))
               }
             />
           )}

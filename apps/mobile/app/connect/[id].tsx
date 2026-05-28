@@ -1,26 +1,25 @@
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { authClient } from '../../lib/auth';
-import { Colors } from '../../constants/theme';
-
-const C = Colors.light;
+import { useCurrentUser } from '../../hooks/use-current-user';
+import { C } from '../../constants/theme';
+import { Routes } from '../../lib/routes';
 
 export default function ConnectDeepLink() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: session, isPending } = authClient.useSession();
+  const { user, isPending } = useCurrentUser();
 
   useEffect(() => {
     if (isPending) return;
     if (!id) { router.replace('/(auth)/welcome'); return; }
 
-    if (session) {
-      router.replace({ pathname: '/(app)/user/[id]', params: { id } } as any);
+    if (user) {
+      router.replace(Routes.userProfile(id));
     } else {
       // Not logged in — send to welcome; after auth they can re-scan
       router.replace('/(auth)/welcome');
     }
-  }, [isPending, session, id]);
+  }, [isPending, user, id]);
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background }}>

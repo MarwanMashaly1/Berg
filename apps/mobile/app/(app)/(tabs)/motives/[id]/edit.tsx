@@ -16,10 +16,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors } from '../../../../../constants/theme';
+import { C } from '../../../../../constants/theme';
 import { apiFetch, getProfileConnections } from '../../../../../lib/api';
-
-const C = Colors.light;
 
 // ─── Avatar helpers ───────────────────────────────────────────────────────────
 const AVATAR_PRESETS: [string, string][] = [

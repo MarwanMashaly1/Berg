@@ -1,15 +1,15 @@
 import { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { patchUser } from '../../../lib/api';
+import { log } from '../../../lib/logger';
 
-const C = Colors.light;
 const PROMPTS = ['Your most niche interest?', "A skill you're quietly proud of?", 'Something you\'re always up to talk about?'];
 
 export default function Step3() {
@@ -30,7 +30,7 @@ export default function Step3() {
       const bio = skip ? undefined : answers.filter(Boolean).join(' · ') || undefined;
       await patchUser({ ...(bio ? { bio } : {}), onboardingStep: '3' });
       router.push('/(app)/onboarding/step-4');
-    } catch { setSaving(false); }
+    } catch (err) { log.error('onboarding step-3 save failed', err); Alert.alert('Something went wrong', 'Please try again.'); setSaving(false); }
   }
 
   return (

@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Switch, Alert, StyleSheet, ToastAndroid, Platform, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Linking } from 'react-native';
+import { useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { authClient } from '../../../../lib/auth';
-import { Colors, Fonts } from '../../../../constants/theme';
-import { BackButton } from '../../../../components/ui/BackButton';
+import { useCurrentUser } from '../../../../hooks/use-current-user';
+import { useProfile } from '../../../../lib/hooks/queries';
+import { C, Fonts } from '../../../../constants/theme';
+import { ScreenHeader } from '../../../../components/ui/ScreenHeader';
 import { patchUser, deleteAccount } from '../../../../lib/api';
 
-const C = Colors.light;
 function showToast(msg: string) {
   if (Platform.OS === 'android') ToastAndroid.show(msg, ToastAndroid.SHORT);
   else Alert.alert('', msg);
@@ -17,8 +19,12 @@ function showToast(msg: string) {
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { data: session } = authClient.useSession();
-  const user = session?.user as any;
+  const { user: currentUser } = useCurrentUser();
+  const { data: profileData, refetch: refetchProfile } = useProfile();
+  // profileData has phoneNumber; currentUser (BetterAuth session) does not
+  const user = { ...(currentUser as any), ...profileData?.user };
+
+  useFocusEffect(useCallback(() => { refetchProfile(); }, [refetchProfile]));
 
   const [notifyPrompt,   setNotifyPrompt]   = useState<boolean>(user?.notifyPromptMatches  ?? true);
   const [notifyCircle,   setNotifyCircle]   = useState<boolean>(user?.notifyCircleRequests ?? true);
@@ -54,18 +60,15 @@ export default function SettingsScreen() {
   }
 
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <BackButton variant="light" />
-        <Text style={styles.title}>Settings</Text>
-      </View>
+    <View style={styles.safe}>
+      <ScreenHeader title="Settings" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.card}>
           <View style={styles.row}>
             <MaterialIcons name="phone-iphone" size={18} color={C.textSecondary} />
             <View style={{ flex: 1 }}><Text style={styles.label}>Phone number</Text><Text style={styles.sub}>{user?.phoneNumber ? '+•• ••• •••• ••••' : 'Not added'}</Text></View>
-            <TouchableOpacity onPress={() => user?.phoneNumber ? showToast('Coming soon — phone change will be available in the next update.') : router.push('/(app)/add-phone')}><Text style={styles.link}>{user?.phoneNumber ? 'Change' : 'Add'}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push(user?.phoneNumber ? '/(app)/add-phone?mode=change' : '/(app)/add-phone')}><Text style={styles.link}>{user?.phoneNumber ? 'Change' : 'Add'}</Text></TouchableOpacity>
           </View>
           <View style={[styles.row, styles.border]}>
             <MaterialIcons name="mail-outline" size={18} color={C.textSecondary} />
@@ -74,8 +77,14 @@ export default function SettingsScreen() {
           </View>
           <View style={[styles.row, styles.border, styles.last]}>
             <MaterialIcons name="sync" size={18} color={C.textSecondary} />
-            <View style={{ flex: 1 }}><Text style={styles.label}>Contacts sync</Text><Text style={styles.sub}>Off</Text></View>
-            <TouchableOpacity onPress={() => showToast('Re-syncing...')}><Text style={styles.link}>Re-sync</Text></TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Contacts sync</Text>
+              <Text style={styles.sub}>{user?.phoneNumber ? 'Tap to resync' : 'Add a phone number to sync contacts'}</Text>
+            </View>
+            {user?.phoneNumber
+              ? <TouchableOpacity onPress={() => router.push('/(app)/find-friends')}><Text style={styles.link}>Re-sync</Text></TouchableOpacity>
+              : <TouchableOpacity onPress={() => router.push('/(app)/add-phone')}><Text style={styles.link}>Add number</Text></TouchableOpacity>
+            }
           </View>
         </View>
 
@@ -148,8 +157,6 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.backgroundWarm },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingBottom: 12 },
-  title: { fontFamily: Fonts.heading, fontSize: 18, color: C.text, flex: 1, fontStyle: 'italic' },
   sectionLabel: { fontFamily: Fonts.bodySemiBold, fontSize: 11, color: C.textTertiary, letterSpacing: 0.6, paddingHorizontal: 18, marginBottom: 6, marginTop: 12 },
   card: { backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginHorizontal: 14 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13 },

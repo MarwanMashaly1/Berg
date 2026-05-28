@@ -8,11 +8,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { C, Fonts } from '../../../../constants/theme';
 import { getCircleDetail, updateCircle, uploadCircleImage, CircleDetail } from '../../../../lib/api';
 import { CATEGORIES } from '../../../../constants/motives';
-
-const C = Colors.light;
 
 const CAT_EMOJIS = CATEGORIES.map((c) => c.emoji);
 const EXTRA_EMOJIS = ['👥', '📚', '🎵', '⚽', '🏋️', '🌿', '🐶', '💻', '🎯', '🌊', '🏔️'];

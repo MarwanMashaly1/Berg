@@ -7,10 +7,8 @@ import Animated, {
   useSharedValue, useAnimatedStyle,
   withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { PromptOption, TodayPromptResponse, respondToPrompt } from '../../../lib/api';
-
-const C = Colors.light;
 
 type Props = {
   prompt: TodayPromptResponse['prompt'];

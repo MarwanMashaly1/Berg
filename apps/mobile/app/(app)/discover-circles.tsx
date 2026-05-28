@@ -1,16 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Modal, RefreshControl,
+  Modal, RefreshControl, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { BackButton } from '../../components/ui/BackButton';
-import { getDiscoveryCircles, joinCircle, CircleSuggestion } from '../../lib/api';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { joinCircle, getDiscoveryCircles, CircleSuggestion } from '../../lib/api';
+import { QK } from '../../lib/hooks/queries';
 import { CircleIcon } from '../../components/ui/CircleIcon';
-
-const C = Colors.light;
+import { log } from '../../lib/logger';
 
 function CircleRow({ circle, onJoined }: { circle: CircleSuggestion; onJoined: (id: string) => void }) {
   const [state, setState] = useState<'idle' | 'joining' | 'pending'>('idle');
@@ -26,7 +27,9 @@ function CircleRow({ circle, onJoined }: { circle: CircleSuggestion; onJoined: (
       } else {
         setState('pending');
       }
-    } catch {
+    } catch (err) {
+      log.error('circle join failed', err);
+      Alert.alert('Something went wrong', 'Please try again.');
       setState('idle');
     }
   }
@@ -115,38 +118,22 @@ function SkeletonRow() {
 
 export default function DiscoverCirclesScreen() {
   const insets = useSafeAreaInsets();
-  const [circles, setCircles]     = useState<CircleSuggestion[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
+
+  const { data, isLoading: loading, isRefetching, refetch } = useQuery({
+    queryKey: QK.discCircles(),
+    queryFn: () => getDiscoveryCircles(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const circles = data?.circles ?? [];
 
   function handleJoined(id: string) {
     setJoinedIds((prev) => new Set([...prev, id]));
   }
 
-  const load = useCallback(async () => {
-    try {
-      const { circles: c } = await getDiscoveryCircles();
-      setCircles(c);
-    } catch { /* keep existing */ }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }
-
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <BackButton variant="light" />
-        <Text style={styles.title}>Circles to join</Text>
-        <View style={{ width: 36 }} />
-      </View>
+    <View style={styles.safe}>
+      <ScreenHeader title="Circles to join" />
 
       <FlatList
         data={loading ? Array.from({ length: 6 }) : circles.filter((c) => !joinedIds.has(c.id))}
@@ -154,7 +141,7 @@ export default function DiscoverCirclesScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24, paddingTop: 4 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />
+          <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={C.primary} />
         }
         renderItem={({ item }) =>
           loading
@@ -178,23 +165,6 @@ export default function DiscoverCirclesScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-    paddingTop: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  title: {
-    fontFamily: Fonts.heading,
-    fontSize: 17,
-    color: C.text,
-    fontStyle: 'italic',
-    letterSpacing: -0.3,
-  },
 
   // Circle row
   row: {

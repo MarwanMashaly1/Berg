@@ -17,10 +17,11 @@ import { or } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth.js';
 import { sendPush, sendPushBatch, filterByPreference } from '../lib/notifications.js';
 import { enqueueAt } from '../lib/queue.js';
-import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
+import { rateLimit, API_LIMITS } from '../lib/rate-limiter.js';
 import { cache, TTL, CK } from '../lib/cache.js';
 import { posthog } from '../lib/posthog.js';
 import type { auth } from '../auth.js';
+import { log } from '../lib/logger.js';
 
 const createMotiveSchema = z.object({
   title: z.string().min(1).max(120),
@@ -93,15 +94,8 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
   const me = c.get('user')!;
 
   // Rate limit: 20 motives per user per hour
-  const rl = rateLimiter.check(
-    `${me.id}:motive-create`,
-    API_LIMITS.motiveCreate.limit,
-    API_LIMITS.motiveCreate.windowMs,
-  );
-  if (!rl.allowed) {
-    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
-    return c.json({ error: 'Too many requests. Try again shortly.' }, 429);
-  }
+  const limitedCreate = rateLimit(c, `${me.id}:motive-create`, API_LIMITS.motiveCreate.limit, API_LIMITS.motiveCreate.windowMs);
+  if (limitedCreate) return limitedCreate;
 
   const body = c.req.valid('json');
 
@@ -132,7 +126,9 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
     invitedUserIds = Array.from(new Set([...rawInvitedUserIds, ...circleUserIds]));
   }
 
-  const [motive] = await db
+  let motive: { id: string };
+  try {
+  [motive] = await db
     .insert(motives)
     .values({
       creatorId: me.id,
@@ -186,7 +182,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
         title: creator?.name ?? 'Someone',
         body: `invited you -- ${title}`,
         data: { screen: 'motives', motiveId: motive.id },
-      }).catch(() => {});
+      }).catch((err) => log.error({ err, motiveId: motive.id }, 'motives invite push failed'));
     }
   }
 
@@ -198,7 +194,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
       enqueueAt('motive/reminder',      data, new Date(t - 2 * 3600 * 1000)),
       enqueueAt('motive/memory-prompt', data, new Date(t + 1 * 3600 * 1000)),
       enqueueAt('motive/resurface',     data, new Date(t + 14 * 24 * 3600 * 1000)),
-    ]).catch(() => {});
+    ]).catch((err) => log.error({ err, motiveId: motive.id }, 'motives reminder enqueue failed'));
   }
 
   // Auto-create group chat when motive is sent as confirmed
@@ -245,6 +241,10 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
   });
 
   return c.json({ id: motive.id }, 201);
+  } catch (err) {
+    log.error({ err, userId: me.id }, 'POST /motives failed');
+    return c.json({ error: 'Failed to create motive' }, 500);
+  }
 });
 
 // --- GET /api/motives -- List user's motives -----------------------------------
@@ -503,16 +503,15 @@ motivesRoutes.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+const rsvpSchema = z.object({ status: z.enum(['going', 'maybe', 'declined']) });
+const confirmSchema = z.object({ happened: z.boolean() });
+const inviteSchema = z.object({ userIds: z.array(z.string()).default([]) });
+
 // --- POST /api/motives/:id/rsvp -- RSVP ---------------------------------------
-motivesRoutes.post('/:id/rsvp', async (c) => {
+motivesRoutes.post('/:id/rsvp', zValidator('json', rsvpSchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
-  const body = await c.req.json();
-  const { status } = body as { status: 'going' | 'maybe' | 'declined' };
-
-  if (!['going', 'maybe', 'declined'].includes(status)) {
-    return c.json({ error: 'status must be going, maybe, or declined' }, 400);
-  }
+  const { status } = c.req.valid('json');
 
   // Map incoming values to rsvpStatus column values
   const rsvpMap: Record<string, string> = {
@@ -554,7 +553,7 @@ motivesRoutes.post('/:id/rsvp', async (c) => {
       title: motiveRow.title,
       body: `${me.name ?? 'Someone'} ${verb[status] ?? status}`,
       data: { screen: 'motives', motiveId },
-    }).catch(() => {});
+    }).catch((err) => log.error({ err, motiveId }, 'motives RSVP push failed'));
   }
 
   return c.json({ ok: true });
@@ -563,10 +562,10 @@ motivesRoutes.post('/:id/rsvp', async (c) => {
 // --- POST /api/motives/:id/confirm -- Confirm whether motive happened --------
 // Called when the user taps "Yes it happened" or "No it was cancelled"
 // in the post-motive confirmation prompt.
-motivesRoutes.post('/:id/confirm', async (c) => {
+motivesRoutes.post('/:id/confirm', zValidator('json', confirmSchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
-  const { happened } = await c.req.json<{ happened: boolean }>();
+  const { happened } = c.req.valid('json');
 
   const [motive] = await db
     .select({ id: motives.id, creatorId: motives.creatorId, title: motives.title, status: motives.status })
@@ -598,23 +597,15 @@ motivesRoutes.post('/:id/confirm', async (c) => {
 });
 
 // --- POST /api/motives/:id/invite -- Invite users post-creation ---------------
-motivesRoutes.post('/:id/invite', async (c) => {
+motivesRoutes.post('/:id/invite', zValidator('json', inviteSchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
 
   // Rate limit: 30 invites per user per hour
-  const rlInvite = rateLimiter.check(
-    `${me.id}:motive-invite`,
-    API_LIMITS.motiveInvite.limit,
-    API_LIMITS.motiveInvite.windowMs,
-  );
-  if (!rlInvite.allowed) {
-    c.header('Retry-After', String(Math.ceil((rlInvite.resetAt - Date.now()) / 1000)));
-    return c.json({ error: 'Too many requests. Try again shortly.' }, 429);
-  }
+  const limitedInvite = rateLimit(c, `${me.id}:motive-invite`, API_LIMITS.motiveInvite.limit, API_LIMITS.motiveInvite.windowMs);
+  if (limitedInvite) return limitedInvite;
 
-  const body = await c.req.json();
-  const { userIds = [] } = body as { userIds: string[] };
+  const { userIds } = c.req.valid('json');
 
   const [motive] = await db
     .select({ id: motives.id })

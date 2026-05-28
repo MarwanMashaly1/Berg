@@ -1,18 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { Stack, router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { authClient } from '../../lib/auth';
+import { useCurrentUser } from '../../hooks/use-current-user';
 
 // Must match storagePrefix ('berg') + '_cookie' in lib/auth.ts
 const SESSION_COOKIE_KEY = 'berg_cookie';
 
 export default function AppLayout() {
-  const { data: session, isPending } = authClient.useSession();
+  const { user, isPending } = useCurrentUser();
   const everHadSession = useRef(false);
 
   useEffect(() => {
-    console.log('[app-layout] session:', !!session, '| isPending:', isPending, '| everHad:', everHadSession.current);
-    if (session) {
+    console.log('[app-layout] session:', !!user, '| isPending:', isPending, '| everHad:', everHadSession.current);
+    if (user) {
       everHadSession.current = true;
       return;
     }
@@ -23,7 +23,7 @@ export default function AppLayout() {
     if (storedCookie) return;
     console.log('[app-layout] → redirecting to welcome');
     router.replace('/(auth)/welcome');
-  }, [session, isPending]);
+  }, [user, isPending]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

@@ -1,19 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL      = process.env.EXPO_PUBLIC_SUPABASE_URL      ?? '';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+import { Config } from './config';
 
 // Guard: if env vars are missing, log a clear error instead of crashing.
 // Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to apps/mobile/.env
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!Config.supabaseUrl || !Config.supabaseAnonKey) {
   console.error(
     '[supabase] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY.\n' +
     'Add them to apps/mobile/.env — get values from Supabase Dashboard → Settings → API',
   );
 }
 
-export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = Config.supabaseUrl && Config.supabaseAnonKey
+  ? createClient(Config.supabaseUrl, Config.supabaseAnonKey, {
       realtime: {
         params: { eventsPerSecond: 10 },
       },

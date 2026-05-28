@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet, Alert } from 'react-native';
 import { router } from 'expo-router';
+
+let Contacts: typeof import('expo-contacts') | null = null;
+try { Contacts = require('expo-contacts'); } catch { /* native module unavailable */ }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { apiFetch, patchUser } from '../../../lib/api';
-
-const C = Colors.light;
+import { log } from '../../../lib/logger';
 
 export default function Step4() {
   const [phone, setPhone] = useState('');
@@ -27,16 +29,20 @@ export default function Step4() {
       const { sessionId } = await apiFetch<{ sessionId: string }>('/api/phone/start', { method: 'POST', body: JSON.stringify({ phoneNumber: fullPhone }) });
       await apiFetch('/api/phone/link', { method: 'POST', body: JSON.stringify({ sessionId }) });
       await patchUser({ onboardingStep: '4' });
+      // Request contacts permission now that user has a phone number — best time to ask
+      if (Contacts) await Contacts.requestPermissionsAsync().catch(() => {});
       router.push('/(app)/onboarding/step-5');
     } catch (err: unknown) {
+      log.error('onboarding step-4 save failed', err);
       setError(err instanceof Error ? err.message : 'Something went wrong');
+      Alert.alert('Something went wrong', 'Please try again.');
     } finally { setSaving(false); }
   }
 
   async function skip() {
     setSaving(true);
     try { await patchUser({ onboardingStep: '4' }); router.push('/(app)/onboarding/step-5'); }
-    catch { setSaving(false); }
+    catch (err) { log.error('onboarding step-4 skip failed', err); Alert.alert('Something went wrong', 'Please try again.'); setSaving(false); }
   }
 
   return (

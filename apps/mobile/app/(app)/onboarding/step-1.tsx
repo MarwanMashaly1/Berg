@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { authClient } from '../../../lib/auth';
-import { Colors, Fonts } from '../../../constants/theme';
+import { useCurrentUser } from '../../../hooks/use-current-user';
+import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
@@ -18,15 +18,13 @@ import {
   uploadAvatarFromUri, PickedImage,
 } from '../../../lib/avatar';
 
-const C = Colors.light;
-
 export default function Step1() {
-  const { data: session } = authClient.useSession();
-  const [name, setName] = useState((session?.user?.name ?? '') as string);
-  const [username, setUsername] = useState((session?.user as any)?.username ?? '');
+  const { user } = useCurrentUser();
+  const [name, setName] = useState((user?.name ?? '') as string);
+  const [username, setUsername] = useState((user as any)?.username ?? '');
   const [usernameError, setUsernameError] = useState('');
   const [usernameChecking, setUsernameChecking] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>((session?.user?.image ?? null) as string | null);
+  const [avatarUri, setAvatarUri] = useState<string | null>((user?.image ?? null) as string | null);
   const [pendingCrop, setPendingCrop] = useState<PickedImage | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);

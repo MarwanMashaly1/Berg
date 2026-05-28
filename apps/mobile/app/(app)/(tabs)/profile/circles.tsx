@@ -5,12 +5,11 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { C, Fonts } from '../../../../constants/theme';
+import { Routes } from '../../../../lib/routes';
 import { Avatar } from '../../../../components/ui/Avatar';
 import { getProfileCircles, getCircleByCode, joinCircle, ProfileCircle } from '../../../../lib/api';
 import { CircleIcon } from '../../../../components/ui/CircleIcon';
-
-const C = Colors.light;
 
 export default function CirclesScreen() {
   const insets = useSafeAreaInsets();
@@ -69,7 +68,7 @@ export default function CirclesScreen() {
         {/* Create circle button */}
         <TouchableOpacity
           style={styles.createBtn}
-          onPress={() => router.push('/(app)/(tabs)/profile/create-circle' as any)}
+          onPress={() => router.push(Routes.profileCreateCircle)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Text style={styles.createLabel}>+ New</Text>
@@ -97,7 +96,7 @@ export default function CirclesScreen() {
               <TouchableOpacity
                 key={ci.id}
                 style={styles.circleCard}
-                onPress={() => router.push({ pathname: '/(app)/(tabs)/profile/circle-detail', params: { id: ci.id } } as any)}
+                onPress={() => router.push(Routes.profileCircleDetail(ci.id))}
                 activeOpacity={0.8}
               >
                 <CircleIcon
@@ -144,7 +143,7 @@ export default function CirclesScreen() {
           <Text style={styles.sectionLabel}>START SOMETHING</Text>
           <TouchableOpacity
             style={styles.createCard}
-            onPress={() => router.push('/(app)/(tabs)/profile/create-circle' as any)}
+            onPress={() => router.push(Routes.profileCreateCircle)}
             activeOpacity={0.85}
           >
             <View style={styles.createCardIcon}>

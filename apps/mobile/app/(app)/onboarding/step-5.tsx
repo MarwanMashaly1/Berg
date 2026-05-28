@@ -1,22 +1,26 @@
 ﻿import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Share, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Share, ActivityIndicator, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { patchUser, getInviteLink } from '../../../lib/api';
-
-const C = Colors.light;
+import { log } from '../../../lib/logger';
+import { useAsyncData } from '../../../lib/hooks/useAsyncData';
 
 export default function Step5() {
   const [saving, setSaving] = useState(false);
-  const [shareLink, setShareLink] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
+  const { data: inviteData, error: inviteError } = useAsyncData(() => getInviteLink(), []);
+  const shareLink = inviteData?.url ?? null;
+
   useEffect(() => {
-    getInviteLink().then((res) => setShareLink(res.url)).catch(() => {});
-  }, []);
+    if (!inviteError) return;
+    log.warn('invite link fetch failed', { error: String(inviteError) });
+    Alert.alert('Something went wrong', 'Please try again.');
+  }, [inviteError]);
 
   async function handleShare() {
     if (!shareLink) return;

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, Share, RefreshControl, Alert,
@@ -6,16 +7,16 @@ import {
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { C, Fonts } from '../../../../constants/theme';
+import { Routes } from '../../../../lib/routes';
 import { Avatar } from '../../../../components/ui/Avatar';
 import {
   getProfileConnections, getInviteLink,
   acceptConnection, declineConnection, cancelConnection,
   getOrCreateDirectChat,
-  ProfileConnection, PendingConnection, SentConnection, InviteLink,
+  ProfileConnection, PendingConnection, SentConnection,
 } from '../../../../lib/api';
-
-const C = Colors.light;
+import { QK } from '../../../../lib/hooks/queries';
 
 // Availability label map
 const AVAIL_LABEL: Record<string, { label: string; color: string }> = {
@@ -26,40 +27,32 @@ const AVAIL_LABEL: Record<string, { label: string; color: string }> = {
 
 export default function ConnectionsScreen() {
   const insets = useSafeAreaInsets();
+  const qc = useQueryClient();
 
-  const [confirmed, setConfirmed]   = useState<ProfileConnection[]>([]);
-  const [pending, setPending]       = useState<PendingConnection[]>([]);
-  const [sent, setSent]             = useState<SentConnection[]>([]);
-  const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
   const [query, setQuery]           = useState('');
   const [sentExpanded, setSentExpanded] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [actioning, setActioning]   = useState<string | null>(null);
   const [messaging, setMessaging]   = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    const [c, il] = await Promise.allSettled([getProfileConnections(), getInviteLink()]);
-    if (c.status === 'fulfilled') {
-      setConfirmed(c.value.confirmed);
-      setPending(c.value.pending);
-      setSent(c.value.sent ?? []);
-    }
-    if (il.status === 'fulfilled') setInviteLink(il.value);
-  }, []);
+  const { data: connectionsData, isRefetching, refetch } = useQuery({
+    queryKey: QK.connections(),
+    queryFn: () => getProfileConnections(),
+  });
+  const { data: inviteLink } = useQuery({
+    queryKey: ['invite-link'],
+    queryFn: () => getInviteLink(),
+    staleTime: Infinity,
+  });
 
-  useEffect(() => { loadData(); }, [loadData]);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  }
+  const confirmed = connectionsData?.confirmed ?? [];
+  const pending   = connectionsData?.pending ?? [];
+  const sent      = connectionsData?.sent ?? [];
 
   async function handleAccept(userId: string) {
     setActioning(userId);
     try {
       await acceptConnection(userId);
-      await loadData(); // reload to move from pending → confirmed
+      qc.invalidateQueries({ queryKey: QK.connections() });
     } catch { /* ignore */ }
     setActioning(null);
   }
@@ -67,7 +60,7 @@ export default function ConnectionsScreen() {
   async function handleDecline(userId: string) {
     setActioning(userId);
     await declineConnection(userId);
-    setPending((prev) => prev.filter((p) => p.id !== userId));
+    qc.invalidateQueries({ queryKey: QK.connections() });
     setActioning(null);
   }
 
@@ -99,7 +92,7 @@ export default function ConnectionsScreen() {
           onPress: async () => {
             setActioning(userId);
             await cancelConnection(userId);
-            setSent((prev) => prev.filter((s) => s.id !== userId));
+            qc.invalidateQueries({ queryKey: QK.connections() });
             setActioning(null);
           },
         },
@@ -112,14 +105,14 @@ export default function ConnectionsScreen() {
     : confirmed;
 
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
+    <View style={styles.safe}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <MaterialIcons name="arrow-back-ios" size={16} color={C.textSecondary} />
         </TouchableOpacity>
         <Text style={styles.title}>Connections</Text>
-        <TouchableOpacity onPress={() => router.push('/(app)/find-friends' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity onPress={() => router.push(Routes.findFriends)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.findBtn}>Find friends</Text>
         </TouchableOpacity>
       </View>
@@ -127,7 +120,7 @@ export default function ConnectionsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={C.primary} />}
       >
         {/* Search bar */}
         <View style={styles.searchWrap}>
@@ -229,7 +222,7 @@ export default function ConnectionsScreen() {
                   key={conn.id}
                   style={styles.connCard}
                   activeOpacity={0.7}
-                  onPress={() => router.push({ pathname: '/(app)/user/[id]', params: { id: conn.id, name: conn.name ?? '', avatarUrl: conn.image ?? '' } } as any)}
+                  onPress={() => router.push(Routes.userProfile(conn.id, conn.name ?? '', conn.image ?? ''))}
                 >
                   <Avatar name={conn.name} userId={conn.id} uri={conn.image ?? undefined} size="md" />
                   <View style={{ flex: 1 }}>
@@ -308,7 +301,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     paddingHorizontal: 18,
-    paddingTop: 8,
     paddingBottom: 14,
   },
   backBtn: {

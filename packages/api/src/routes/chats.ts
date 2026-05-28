@@ -13,9 +13,10 @@ import {
 import { requireAuth } from '../middleware/auth.js';
 import { debouncedChatPush } from '../lib/notifications.js';
 import { supabaseAdmin, CHAT_IMAGES_BUCKET } from '../lib/supabase-admin.js';
-import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
+import { rateLimiter, rateLimit, API_LIMITS } from '../lib/rate-limiter.js';
 import { cache, TTL, CK } from '../lib/cache.js';
 import type { auth } from '../auth.js';
+import { log } from '../lib/logger.js';
 
 type Variables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -45,6 +46,7 @@ chatsRoutes.get('/', async (c) => {
     return c.json(cached);
   }
 
+  try {
   // All chats the user belongs to
   const memberRows = await db
     .select({ chatId: chatMembers.chatId })
@@ -149,6 +151,10 @@ chatsRoutes.get('/', async (c) => {
   cache.set(CK.chatList(me.id), result, TTL.CHAT_LIST);
   c.header('X-Cache', 'MISS');
   return c.json(result);
+  } catch (err) {
+    log.error({ err, userId: me.id }, 'GET /chats failed');
+    return c.json({ error: 'Failed to load chats' }, 500);
+  }
 });
 
 // -- POST /api/chats/groups -- create a personal group chat --------------------
@@ -255,7 +261,7 @@ chatsRoutes.get('/:id/messages', async (c) => {
   if (beforeDate && isNaN(beforeDate.getTime())) {
     return c.json({ error: 'invalid before cursor' }, 400);
   }
-  const limit = Math.min(Number(c.req.query('limit') ?? 40), 100);
+  const limit = Math.max(1, Math.min(Number(c.req.query('limit') ?? 40), 100));
 
   if (!(await assertMember(chatId, me.id))) {
     return c.json({ error: 'not a member' }, 403);
@@ -309,15 +315,8 @@ chatsRoutes.post('/:id/messages', async (c) => {
   const chatId = c.req.param('id');
 
   // Rate limit: 60 messages per user per minute
-  const rl = rateLimiter.check(
-    `${me.id}:chat-message`,
-    API_LIMITS.chatMessage.limit,
-    API_LIMITS.chatMessage.windowMs,
-  );
-  if (!rl.allowed) {
-    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
-    return c.json({ error: 'Too many requests. Try again shortly.' }, 429);
-  }
+  const limited = rateLimit(c, `${me.id}:chat-message`, API_LIMITS.chatMessage.limit, API_LIMITS.chatMessage.windowMs);
+  if (limited) return limited;
 
   const { content, type = 'text', metadata } = await c.req.json<{
     content: string;
@@ -375,7 +374,7 @@ chatsRoutes.post('/:id/messages', async (c) => {
         title: isGroup ? (chat.name ?? 'Group') : (me.name ?? 'Someone'),
         body: isGroup ? `${me.name ?? 'Someone'}: ${preview}` : preview,
         data: { screen: 'chat', chatId },
-      }).catch(() => {});
+      }).catch((err) => log.error({ err, chatId }, 'chats push failed'));
     }
   }
 
@@ -426,7 +425,7 @@ chatsRoutes.post('/:id/upload-url', async (c) => {
     .createSignedUploadUrl(path);
 
   if (error || !data) {
-    console.error('[chats] createSignedUploadUrl error:', JSON.stringify(error));
+    log.error({ err: error, chatId }, 'chats upload URL creation failed');
     return c.json({ error: `could not create upload URL: ${error?.message ?? 'unknown'}` }, 500);
   }
 

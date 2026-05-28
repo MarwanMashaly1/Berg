@@ -7,13 +7,11 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { authClient } from '../../../lib/auth';
-import { Colors } from '../../../constants/theme';
+import { useCurrentUser } from '../../../hooks/use-current-user';
+import { C } from '../../../constants/theme';
 import { IconSymbol } from '../../../components/ui/icon-symbol';
 import { identifyUser, trackScreen } from '../../../lib/analytics';
 import * as Sentry from '@sentry/react-native';
-
-const C = Colors.light;
 
 function TabIcon({
   name,
@@ -46,32 +44,32 @@ function TabIcon({
 }
 
 export default function TabsLayout() {
-  const { data: session, isPending } = authClient.useSession();
+  const { user, isPending } = useCurrentUser();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    if (!isPending && !session) {
+    if (!isPending && !user) {
       router.replace('/(auth)/welcome');
     }
-  }, [session, isPending]);
+  }, [user, isPending]);
 
   // Identify user once session is known
   useEffect(() => {
-    if (session?.user) {
-      identifyUser(session.user.id, { name: session.user.name, email: session.user.email });
-      Sentry.setUser({ id: session.user.id, email: session.user.email ?? undefined, username: session.user.name ?? undefined });
+    if (user) {
+      identifyUser(user.id, { name: user.name, email: user.email });
+      Sentry.setUser({ id: user.id, email: user.email ?? undefined, username: user.name ?? undefined });
     } else if (!isPending) {
       Sentry.setUser(null);
     }
-  }, [session?.user?.id, isPending]);
+  }, [user?.id, isPending]);
 
   // Track every screen change
   useEffect(() => {
     if (pathname) trackScreen(pathname);
   }, [pathname]);
 
-  if (isPending || !session) return null;
+  if (isPending || !user) return null;
 
   return (
     <Tabs
@@ -120,11 +118,13 @@ export default function TabsLayout() {
         name="chat"
         options={{
           title: 'Chat',
-          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="message" active={focused} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          focus: () => navigation.navigate('chat', { screen: 'index' }),
+        })}
       />
       <Tabs.Screen
         name="profile"

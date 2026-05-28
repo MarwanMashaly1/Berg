@@ -14,14 +14,14 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../../../constants/theme';
+import { C, Colors, Fonts } from '../../../../../constants/theme';
+import { Routes } from '../../../../../lib/routes';
 import { Avatar } from '../../../../../components/ui/Avatar';
 import { getMotiveMemories, getMotive, MemoryContributor, Motive } from '../../../../../lib/api';
 import { BackButton } from '../../../../../components/ui/BackButton';
 
 // Dark gallery mode — intentionally uses dark theme tokens
 const Cd = Colors.dark;
-const Cl = Colors.light;
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - 4) / 3;
@@ -265,7 +265,7 @@ export default function MemoriesScreen() {
         </View>
         {/* Add your memories shortcut */}
         <TouchableOpacity
-          onPress={() => router.push(`/(app)/(tabs)/motives/${id}/memory` as any)}
+          onPress={() => router.push(Routes.motiveMemory(id!))}
           style={styles.addBtn}
         >
           <Text style={styles.addBtnText}>+ Add</Text>
@@ -274,14 +274,14 @@ export default function MemoriesScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={Cl.primary} size="large" />
+          <ActivityIndicator color={C.primary} size="large" />
         </View>
       ) : memories.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>No memories yet</Text>
           <Text style={styles.emptySub}>Be the first to share yours</Text>
           <TouchableOpacity
-            onPress={() => router.push(`/(app)/(tabs)/motives/${id}/memory` as any)}
+            onPress={() => router.push(Routes.motiveMemory(id!))}
             style={styles.emptyBtn}
           >
             <Text style={styles.emptyBtnText}>Add memories</Text>
@@ -295,7 +295,7 @@ export default function MemoriesScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); load(); }}
-              tintColor={Cl.primary}
+              tintColor={C.primary}
             />
           }
         >
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   addBtnText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 13,
-    color: Cl.primary,
+    color: C.primary,
   },
   center: {
     flex: 1,
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   },
   emptyBtn: {
     marginTop: 16,
-    backgroundColor: Cl.primary,
+    backgroundColor: C.primary,
     borderRadius: 12,
     paddingHorizontal: 24,
     paddingVertical: 12,
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   },
   personRating: {
     fontSize: 13,
-    color: Colors.light.primary,
+    color: C.primary,
   },
   personVibes: {
     fontFamily: Fonts.body,
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   youBadge: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 11,
-    color: Cl.primary,
+    color: C.primary,
     backgroundColor: 'rgba(255,107,53,0.12)',
     paddingHorizontal: 8,
     paddingVertical: 3,

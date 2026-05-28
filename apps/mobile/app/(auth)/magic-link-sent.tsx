@@ -8,16 +8,15 @@ import * as Linking from 'expo-linking';
 import * as SecureStore from 'expo-secure-store';
 import { getSetCookie } from '@better-auth/expo/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 import { authClient } from '../../lib/auth';
 import { identifyUser, captureError } from '../../lib/analytics';
+import { Routes } from '../../lib/routes';
+import { Config } from '../../lib/config';
 
 // Must match the storagePrefix in lib/auth.ts → 'berg' + '_cookie'
 const COOKIE_KEY = 'berg_cookie';
 const RESEND_COOLDOWN = 30;
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
-
-const C = Colors.light;
 
 export default function MagicLinkSentScreen() {
   const insets = useSafeAreaInsets();
@@ -62,7 +61,7 @@ export default function MagicLinkSentScreen() {
 
     try {
       // Step 1: verify the code with our server proxy
-      const res = await fetch(`${API_URL}/api/auth/verify-code`, {
+      const res = await fetch(`${Config.apiUrl}/api/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: trimmed, email }),
@@ -105,9 +104,9 @@ export default function MagicLinkSentScreen() {
         identifyUser(user.id, { name: user.name ?? '', email: user.email ?? '' });
         if (!user?.onboardingCompleted) {
           const step = parseInt(user?.onboardingStep ?? '0', 10);
-          router.replace(`/(app)/onboarding/step-${Math.min(step + 1, 6)}` as any);
+          router.replace(Routes.onboarding(Math.min(step + 1, 6) as 1|2|3|4|5|6));
         } else {
-          router.replace('/(app)/(tabs)/discovery');
+          router.replace(Routes.discovery);
         }
         return;
       }
@@ -117,9 +116,9 @@ export default function MagicLinkSentScreen() {
 
       if (!user?.onboardingCompleted) {
         const step = parseInt(user?.onboardingStep ?? '0', 10);
-        router.replace(`/(app)/onboarding/step-${Math.min(step + 1, 6)}` as any);
+        router.replace(Routes.onboarding(Math.min(step + 1, 6) as 1|2|3|4|5|6));
       } else {
-        router.replace('/(app)/(tabs)/discovery');
+        router.replace(Routes.discovery);
       }
     } catch (e) {
       console.error('[verify] error:', e);

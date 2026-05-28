@@ -5,18 +5,17 @@
  * Shows: today's prompt question, both users' answers, and a soft CTA to plan something.
  * The CTA leads to motive creation but is a choice, not a forced redirect.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
+import { GestureDetector, Gesture, ScrollView } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 import { apiFetch } from '../../lib/api';
 import { Avatar } from '../../components/ui/Avatar';
-
-const C = Colors.light;
 
 type MatchDetail = {
   id: string;
@@ -43,7 +42,6 @@ export default function MatchDetailScreen() {
   useEffect(() => {
     apiFetch<{ matches: MatchDetail[] }>('/api/matches')
       .then((data) => {
-        // Filter to the specific prompt+option if provided by the notification
         const filtered = promptId
           ? data.matches.filter((m) =>
               m.promptId === promptId && (!optionKey || m.optionKey === optionKey),
@@ -57,6 +55,25 @@ export default function MatchDetailScreen() {
 
   const match = matches[0] ?? null;
 
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollY = useRef(0);
+  const dismissed = useRef(false);
+
+  // Pan gesture runs simultaneously with the scroll view so it works on both
+  // iOS (where it supplements rubber-band) and Android (no rubber-band).
+  // activeOffsetY([-15, 10000]) means it only activates for upward swipes —
+  // downward scrolling is left entirely to the scroll view.
+  const swipeUp = Gesture.Pan()
+    .simultaneousWithExternalGesture(scrollRef)
+    .activeOffsetY([-15, 10000])
+    .runOnJS(true)
+    .onEnd((e) => {
+      if (scrollY.current <= 2 && e.translationY < -60 && !dismissed.current) {
+        dismissed.current = true;
+        router.back();
+      }
+    });
+
   function handlePlanSomething() {
     if (!match) return;
     router.push({
@@ -69,68 +86,80 @@ export default function MatchDetailScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* Nav */}
-      <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backChevron}>{'<'}</Text>
-        </TouchableOpacity>
-        <Text style={styles.navTitle}>You agree</Text>
-        <View style={styles.navRight} />
-      </View>
-
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={C.primary} />
-        </View>
-      ) : error || !match ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyText}>
-            {error ?? 'This match has expired or been dismissed.'}
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Prompt question */}
-          <Text style={styles.promptQuestion}>{match.prompt.question}</Text>
-
-          {/* Answer cards — side by side */}
-          <View style={styles.answerRow}>
-            <View style={[styles.answerCard, styles.answerCardMine]}>
-              <Text style={styles.answerLabel}>YOU</Text>
-              <Text style={styles.answerEmoji}>{match.myAnswer?.emoji ?? '•'}</Text>
-              <Text style={styles.answerText}>{match.myAnswer?.text ?? match.optionKey}</Text>
-            </View>
-            <View style={[styles.answerCard, styles.answerCardTheirs]}>
-              <Text style={styles.answerLabel}>{match.friend.name?.toUpperCase() ?? 'THEM'}</Text>
-              <Text style={styles.answerEmoji}>{match.theirAnswer?.emoji ?? '•'}</Text>
-              <Text style={styles.answerText}>{match.theirAnswer?.text ?? match.optionKey}</Text>
-            </View>
-          </View>
-
-          {/* Friend info */}
-          <View style={styles.friendRow}>
-            <Avatar name={match.friend.name ?? undefined} userId={match.friend.id} size="md" />
-            <View style={styles.friendInfo}>
-              <Text style={styles.friendName}>{match.friend.name ?? 'A friend'}</Text>
-              <Text style={styles.friendSub}>Picked the same answer as you</Text>
-            </View>
-          </View>
-
-          {/* Soft CTA — planning is a choice, not a forced redirect */}
-          <TouchableOpacity style={styles.planBtn} onPress={handlePlanSomething} activeOpacity={0.85}>
-            <Text style={styles.planBtnText}>Want to plan something?</Text>
+    <GestureDetector gesture={swipeUp}>
+      <Animated.View style={[styles.root, { paddingTop: insets.top }]}>
+        {/* Nav */}
+        <View style={styles.navBar}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={styles.backChevron}>{'<'}</Text>
           </TouchableOpacity>
+          <Text style={styles.navTitle}>You agree</Text>
+          <View style={styles.navRight} />
+        </View>
 
-          <TouchableOpacity style={styles.dismissBtn} onPress={() => router.back()}>
-            <Text style={styles.dismissText}>Maybe later</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      )}
-    </View>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={C.primary} />
+          </View>
+        ) : error || !match ? (
+          <View style={styles.center}>
+            <Text style={styles.emptyText}>
+              {error ?? 'This match has expired or been dismissed.'}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              scrollY.current = e.nativeEvent.contentOffset.y;
+              // iOS rubber-band: contentOffset.y goes negative when pulling up past top
+              if (e.nativeEvent.contentOffset.y < -80 && !dismissed.current) {
+                dismissed.current = true;
+                router.back();
+              }
+            }}
+          >
+            {/* Prompt question */}
+            <Text style={styles.promptQuestion}>{match.prompt.question}</Text>
+
+            {/* Answer cards — side by side */}
+            <View style={styles.answerRow}>
+              <View style={[styles.answerCard, styles.answerCardMine]}>
+                <Text style={styles.answerLabel}>YOU</Text>
+                <Text style={styles.answerEmoji}>{match.myAnswer?.emoji ?? '•'}</Text>
+                <Text style={styles.answerText}>{match.myAnswer?.text ?? match.optionKey}</Text>
+              </View>
+              <View style={[styles.answerCard, styles.answerCardTheirs]}>
+                <Text style={styles.answerLabel}>{match.friend.name?.toUpperCase() ?? 'THEM'}</Text>
+                <Text style={styles.answerEmoji}>{match.theirAnswer?.emoji ?? '•'}</Text>
+                <Text style={styles.answerText}>{match.theirAnswer?.text ?? match.optionKey}</Text>
+              </View>
+            </View>
+
+            {/* Friend info */}
+            <View style={styles.friendRow}>
+              <Avatar name={match.friend.name ?? undefined} userId={match.friend.id} size="md" />
+              <View style={styles.friendInfo}>
+                <Text style={styles.friendName}>{match.friend.name ?? 'A friend'}</Text>
+                <Text style={styles.friendSub}>Picked the same answer as you</Text>
+              </View>
+            </View>
+
+            {/* Soft CTA — planning is a choice, not a forced redirect */}
+            <TouchableOpacity style={styles.planBtn} onPress={handlePlanSomething} activeOpacity={0.85}>
+              <Text style={styles.planBtnText}>Want to plan something?</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.dismissBtn} onPress={() => router.back()}>
+              <Text style={styles.dismissText}>Maybe later</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
+      </Animated.View>
+    </GestureDetector>
   );
 }
 

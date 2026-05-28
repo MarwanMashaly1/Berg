@@ -15,7 +15,8 @@ import {
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Colors, Fonts } from "../../../../constants/theme";
+import { C, Fonts } from "../../../../constants/theme";
+import { Routes } from "../../../../lib/routes";
 import {
   getTodayPrompt,
   getPromptMatches,
@@ -39,8 +40,7 @@ import { MatchReveal } from "../../../../components/features/discovery/MatchReve
 // [align-5] CirclesSection hidden — stranger discovery is secondary. See PRODUCT_NORTH_STAR.md. Component lives in explore.tsx.
 // import { CirclesSection } from "../../../../components/features/discovery/CirclesSection";
 import { CirclePulse } from "../../../../components/features/discovery/CirclePulse";
-
-const C = Colors.light;
+import { log } from "../../../../lib/logger";
 
 // ─── Notification inbox sheet ──────────────────────────────────────────────────
 
@@ -301,7 +301,7 @@ export default function DiscoveryScreen() {
   async function handleTapNotification(item: NotificationItem) {
     // Mark as read
     if (!item.readAt) {
-      markNotificationRead(item.id).catch(() => {});
+      markNotificationRead(item.id).catch((err: unknown) => log.warn('mark notification read failed', { error: String(err) }));
       setUnreadCount((c) => Math.max(0, c - 1));
       setNotifications((prev) =>
         prev.map((n) =>
@@ -320,27 +320,26 @@ export default function DiscoveryScreen() {
             case "motives":
               if (data.motiveId) {
                 const suffix = data.path ? `/${data.path}` : "";
-                router.push(
-                  `/(app)/(tabs)/motives/${data.motiveId}${suffix}` as any,
-                );
+                if (suffix) {
+                  router.push(`/(app)/(tabs)/motives/${data.motiveId}${suffix}` as any);
+                } else {
+                  router.push(Routes.motive(data.motiveId));
+                }
               }
               break;
             case "chat":
               if (data.chatId)
-                router.push(`/(app)/(tabs)/chat/${data.chatId}` as any);
+                router.push(Routes.chat(data.chatId));
               break;
             case "discovery":
               // Already here — just close the sheet
               break;
             case "connections":
-              router.push("/(app)/(tabs)/profile/connections" as any);
+              router.push(Routes.profileConnections);
               break;
             case "circle":
               if (data.circleId) {
-                router.push({
-                  pathname: "/(app)/(tabs)/profile/circle-detail",
-                  params: { id: data.circleId },
-                } as any);
+                router.push(Routes.profileCircleDetail(data.circleId));
               }
               break;
           }
@@ -453,7 +452,7 @@ export default function DiscoveryScreen() {
                 <TouchableOpacity
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   onPress={() => {
-                    dismissMatch(m.id).catch(() => {});
+                    dismissMatch(m.id).catch((err: unknown) => log.warn('dismiss match failed', { error: String(err) }));
                     setOpenMatches((prev) => prev.filter((x) => x.id !== m.id));
                   }}>
                   <MaterialIcons name="close" size={16} color={C.textTertiary} />
@@ -485,7 +484,7 @@ export default function DiscoveryScreen() {
         {/* ── Explore entry point ───────────────────────────────────────────── */}
         <TouchableOpacity
           style={styles.exploreRow}
-          onPress={() => router.push('/(app)/explore' as any)}
+          onPress={() => router.push(Routes.explore)}
           activeOpacity={0.75}>
           <Text style={styles.exploreRowText}>Find people you might know</Text>
           <MaterialIcons name="chevron-right" size={20} color={C.textSecondary} />

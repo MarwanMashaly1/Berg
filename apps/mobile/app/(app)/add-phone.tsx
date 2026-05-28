@@ -2,18 +2,18 @@ import { useState } from 'react';
 import {
   View, Text, KeyboardAvoidingView, Platform, ScrollView, StyleSheet,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { BackButton } from '../../components/ui/BackButton';
 import { apiFetch } from '../../lib/api';
 
-const C = Colors.light;
-
 export default function AddPhoneScreen() {
   const insets = useSafeAreaInsets();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isChanging = mode === 'change';
   const [phone, setPhone] = useState('');
   const [countryCode, setCountryCode] = useState('+1');
   const [saving, setSaving] = useState(false);
@@ -36,7 +36,7 @@ export default function AddPhoneScreen() {
         body: JSON.stringify({ sessionId }),
       });
       setDone(true);
-      setTimeout(() => router.back(), 1200);
+      setTimeout(() => router.replace('/(app)/find-friends'), 1200);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -64,15 +64,17 @@ export default function AddPhoneScreen() {
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.heading}>Add your number</Text>
+          <Text style={styles.heading}>{isChanging ? 'Change your number' : 'Add your number'}</Text>
           <View style={styles.rule} />
           <Text style={styles.sub}>
-            Friends who have your number will find you automatically. We never share it or send SMS.
+            {isChanging
+              ? 'Enter your new number. Friends with this number will find you automatically.'
+              : 'Friends who have your number will find you automatically. We never share it or send SMS.'}
           </Text>
 
           {done ? (
             <View style={styles.successBox}>
-              <Text style={styles.successText}>Phone number saved!</Text>
+              <Text style={styles.successText}>{isChanging ? 'Phone number updated!' : 'Phone number saved!'}</Text>
             </View>
           ) : (
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 28 }}>
@@ -99,7 +101,7 @@ export default function AddPhoneScreen() {
 
         {!done && (
           <Button
-            label="Save number"
+            label={isChanging ? 'Update number' : 'Save number'}
             onPress={handleSubmit}
             loading={saving}
             fullWidth

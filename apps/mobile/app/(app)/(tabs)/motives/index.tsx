@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   TextInput,
   RefreshControl,
 } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,14 +24,13 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { Colors, Fonts } from '../../../../constants/theme';
-import { authClient } from '../../../../lib/auth';
+import { C, Fonts } from '../../../../constants/theme';
+import { Routes } from '../../../../lib/routes';
+import { useCurrentUser } from '../../../../hooks/use-current-user';
 import { apiFetch } from '../../../../lib/api';
 import { CATEGORY_MAP, avatarColor, initials } from '../../../../constants/motives';
 import { Avatar } from '../../../../components/ui/Avatar';
 import { SkeletonMotiveCard } from '../../../../components/ui/Skeleton';
-
-const C = Colors.light;
 
 // ─── Category helper ──────────────────────────────────────────────────────────
 function getCat(key: string) {
@@ -186,7 +186,7 @@ function MotiveCard({ motive, index }: { motive: Motive; index: number }) {
     <Animated.View entering={FadeInDown.delay(index * 60).springify()}>
       <Animated.View style={animatedStyle}>
         <Pressable
-          onPress={() => router.push(`/(app)/(tabs)/motives/${motive.id}` as any)}
+          onPress={() => router.push(Routes.motive(motive.id))}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           style={styles.card}
@@ -228,7 +228,7 @@ function MotiveCard({ motive, index }: { motive: Motive; index: number }) {
               <Pressable
                 onPress={(e) => {
                   e.stopPropagation?.();
-                  router.push(`/(app)/(tabs)/motives/${motive.id}/memories` as any);
+                  router.push(Routes.motiveMemories(motive.id));
                 }}
                 style={styles.memoriesStrip}
               >
@@ -244,7 +244,7 @@ function MotiveCard({ motive, index }: { motive: Motive; index: number }) {
               <Pressable
                 onPress={(e) => {
                   e.stopPropagation?.();
-                  router.push(`/(app)/(tabs)/motives/${motive.id}/memory` as any);
+                  router.push(Routes.motiveMemory(motive.id));
                 }}
                 style={styles.memoriesStrip}
               >
@@ -293,36 +293,15 @@ function EmptyState() {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function MotivesScreen() {
   const insets = useSafeAreaInsets();
-  const { data: session } = authClient.useSession();
-  const [motives, setMotives] = useState<Motive[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useCurrentUser();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchMotives = useCallback(async () => {
-    try {
-      setError(null);
-      setLoading(true);
-      const data = await apiFetch<{ motives: Motive[] }>('/api/motives');
-      setMotives(data.motives);
-    } catch (e: any) {
-      setError(e.message ?? 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchMotives();
-  }, [fetchMotives]);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    await fetchMotives();
-    setRefreshing(false);
-  }
+  const { data, isLoading: loading, isError, isRefetching, refetch } = useQuery({
+    queryKey: ['motives'],
+    queryFn: () => apiFetch<{ motives: Motive[] }>('/api/motives'),
+  });
+  const motives = data?.motives ?? [];
 
   const filtered = useMemo(() => {
     const byFilter = filterMotives(motives, filter);
@@ -383,10 +362,10 @@ export default function MotivesScreen() {
         <View style={{ flex: 1, paddingTop: 4 }}>
           {[0, 1, 2].map(i => <SkeletonMotiveCard key={i} />)}
         </View>
-      ) : error ? (
+      ) : isError ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>Something went wrong</Text>
-          <TouchableOpacity onPress={fetchMotives} style={styles.retryBtn}>
+          <TouchableOpacity onPress={() => refetch()} style={styles.retryBtn}>
             <Text style={styles.retryText}>Try again</Text>
           </TouchableOpacity>
         </View>
@@ -400,7 +379,7 @@ export default function MotivesScreen() {
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />
+            <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={C.primary} />
           }
         />
       )}
@@ -411,7 +390,7 @@ export default function MotivesScreen() {
         style={[styles.fab, { bottom: insets.bottom + 24 }]}
       >
         <TouchableOpacity
-          onPress={() => router.push('/(app)/(tabs)/motives/create' as any)}
+          onPress={() => router.push(Routes.motiveCreate)}
           style={styles.fabBtn}
           activeOpacity={0.85}
         >

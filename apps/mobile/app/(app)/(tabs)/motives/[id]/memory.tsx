@@ -20,7 +20,9 @@ import Animated, {
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts, Shadow } from '../../../../../constants/theme';
+import { log } from '../../../../../lib/logger';
+import { C, Fonts, Shadow } from '../../../../../constants/theme';
+import { Routes } from '../../../../../lib/routes';
 import { CATEGORY_MAP } from '../../../../../constants/motives';
 import { Avatar } from '../../../../../components/ui/Avatar';
 import { BackButton } from '../../../../../components/ui/BackButton';
@@ -34,7 +36,6 @@ import {
   Motive,
 } from '../../../../../lib/api';
 
-const C = Colors.light;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MAX_PHOTOS = 10;
 
@@ -355,7 +356,7 @@ function Step4Card({
       <OrangeCta label={saving ? 'Saving...' : 'Save & Share'} onPress={onSave} disabled={saving} />
 
       <TouchableOpacity
-        onPress={() => router.push(`/(app)/(tabs)/motives/${motive.id}/memories` as any)}
+        onPress={() => router.push(Routes.motiveMemories(motive.id))}
         style={styles.galleryLink}
       >
         <Text style={styles.galleryLinkText}>View shared memories →</Text>
@@ -410,7 +411,7 @@ function PhotoManagerScreen({
       <PhotoGrid photos={photos} uploading={uploading} onAdd={onAdd} onRemove={onRemove} atLimit={atLimit} />
 
       <TouchableOpacity
-        onPress={() => router.push(`/(app)/(tabs)/motives/${motive.id}/memories` as any)}
+        onPress={() => router.push(Routes.motiveMemories(motive.id))}
         style={styles.galleryLink}
       >
         <Text style={styles.galleryLinkText}>View everyone's memories →</Text>
@@ -443,7 +444,7 @@ export default function MemoryScreen() {
     if (!id) return;
 
     Promise.all([
-      getMotive(id).then(res => setMotive(res.motive)).catch(() => {}),
+      getMotive(id).then(res => setMotive(res.motive)).catch((err) => log.error('memory: motive load failed', err, { motiveId: id })),
       getMyMemory(id).then(res => {
         const mem = res.memory;
         if (mem) {
@@ -454,7 +455,7 @@ export default function MemoryScreen() {
           setPhotos(mem.photos.map(p => ({ localUri: p.signedUrl, path: p.path })));
           setMode('return');
         }
-      }).catch(() => {}),
+      }).catch((err) => log.error('memory: existing memory load failed', err, { motiveId: id })),
     ]).finally(() => setLoading(false));
   }, [id]);
 
@@ -544,7 +545,7 @@ export default function MemoryScreen() {
         rating: rating || undefined,
         venueRating: venueRating || undefined,
       });
-      router.replace(`/(app)/(tabs)/motives/${id}/memories` as any);
+      router.replace(Routes.motiveMemories(id));
     } catch (e) {
       console.error('Save memory failed:', e);
       setSaving(false);

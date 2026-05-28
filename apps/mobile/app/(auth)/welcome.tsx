@@ -14,7 +14,7 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="light" />
+      <StatusBar style="light" backgroundColor={Colors.light.backgroundDarkDeep} />
       <GrainTexture />
 
       {/* Warm orange glow rising from the bottom — dark moment accent */}

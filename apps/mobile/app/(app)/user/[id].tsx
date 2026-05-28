@@ -5,11 +5,9 @@ import {
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { Avatar } from '../../../components/ui/Avatar';
 import { getPublicUser, requestConnection, getOrCreateDirectChat, removeConnection } from '../../../lib/api';
-
-const C = Colors.light;
 
 const AVAIL_LABEL: Record<string, { label: string; color: string; bg: string }> = {
   down_to_hang: { label: 'Down to hang', color: '#2D6A4F', bg: 'rgba(45,106,79,0.10)' },

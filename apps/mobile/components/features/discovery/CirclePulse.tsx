@@ -1,8 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { PulseCard } from '../../../lib/api';
-
-const C = Colors.light;
 
 type Props = {
   cards: PulseCard[];

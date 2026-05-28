@@ -24,8 +24,9 @@ import { enqueue } from "../lib/queue.js";
 import { cache, TTL, CK } from "../lib/cache.js";
 import { requireAuth } from "../middleware/auth.js";
 import { supabaseAdmin, AVATARS_BUCKET } from "../lib/supabase-admin.js";
-import { rateLimiter, API_LIMITS } from "../lib/rate-limiter.js";
+import { rateLimit, API_LIMITS } from "../lib/rate-limiter.js";
 import type { auth } from "../auth.js";
+import { log } from "../lib/logger.js";
 
 /** Generates a cryptographically secure invite code (no ambiguous characters). */
 function generateInviteCode(): string {
@@ -88,7 +89,7 @@ const patchUserSchema = z
     bio: z.string().max(500).optional(),
     image: z.string().url().optional(),
     availabilityStatus: z.enum(["down_to_hang", "busy", "ask_me"]).optional(),
-    onboardingStep: z.string().optional(),
+    onboardingStep: z.coerce.number().int().min(0).max(20).optional(),
     onboardingCompleted: z.boolean().optional(),
     notifyPromptMatches: z.boolean().optional(),
     notifyCircleRequests: z.boolean().optional(),
@@ -96,6 +97,14 @@ const patchUserSchema = z
     showInDiscovery: z.boolean().optional(),
   })
   .strict();
+
+const avatarUploadSchema = z.object({
+  ext: z.string().regex(/^[a-z0-9]+$/i).default('jpg'),
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/heic']).default('image/jpeg'),
+});
+const pushTokenSchema = z.object({
+  token: z.string().startsWith('ExponentPushToken[', { message: 'Invalid push token format' }),
+});
 
 userRoutes.patch("/me", zValidator("json", patchUserSchema), async (c) => {
   const currentUser = c.get("user")!;
@@ -121,7 +130,7 @@ userRoutes.patch("/me", zValidator("json", patchUserSchema), async (c) => {
   if (body.showInDiscovery !== undefined)
     updates.showInDiscovery = body.showInDiscovery;
   if (body.onboardingStep !== undefined) {
-    const newStep = parseInt(body.onboardingStep, 10);
+    const newStep = body.onboardingStep; // already coerced to number by Zod
     const currentStep = parseInt(currentUser.onboardingStep ?? "0", 10);
     // Only increment, never go back
     if (newStep > currentStep) {
@@ -133,34 +142,39 @@ userRoutes.patch("/me", zValidator("json", patchUserSchema), async (c) => {
     return c.json({ user: currentUser });
   }
 
-  await db
-    .update(users)
-    .set({ ...updates, updatedAt: new Date() })
-    .where(eq(users.id, currentUser.id));
+  try {
+    await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, currentUser.id));
 
-  // Re-fetch with explicit projection to avoid leaking phoneNumber/phoneHash/expoPushToken
-  const [updated] = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      displayName: users.displayName,
-      username: users.username,
-      bio: users.bio,
-      availabilityStatus: users.availabilityStatus,
-      onboardingStep: users.onboardingStep,
-      onboardingCompleted: users.onboardingCompleted,
-      image: users.image,
-      notifyPromptMatches: users.notifyPromptMatches,
-      notifyCircleRequests: users.notifyCircleRequests,
-      notifyMotiveInvites: users.notifyMotiveInvites,
-      showInDiscovery: users.showInDiscovery,
-    })
-    .from(users)
-    .where(eq(users.id, currentUser.id))
-    .limit(1);
+    // Re-fetch with explicit projection to avoid leaking phoneNumber/phoneHash/expoPushToken
+    const [updated] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        displayName: users.displayName,
+        username: users.username,
+        bio: users.bio,
+        availabilityStatus: users.availabilityStatus,
+        onboardingStep: users.onboardingStep,
+        onboardingCompleted: users.onboardingCompleted,
+        image: users.image,
+        notifyPromptMatches: users.notifyPromptMatches,
+        notifyCircleRequests: users.notifyCircleRequests,
+        notifyMotiveInvites: users.notifyMotiveInvites,
+        showInDiscovery: users.showInDiscovery,
+      })
+      .from(users)
+      .where(eq(users.id, currentUser.id))
+      .limit(1);
 
-  cache.del(CK.userMe(currentUser.id));
-  return c.json({ user: updated ?? null });
+    cache.del(CK.userMe(currentUser.id));
+    return c.json({ user: updated ?? null });
+  } catch (err) {
+    log.error({ err, userId: currentUser.id }, 'PATCH /me failed');
+    return c.json({ error: 'Failed to update profile' }, 500);
+  }
 });
 
 // GET /api/users/me/vibe-tags -- fetch current user's selected vibe tag IDs
@@ -204,7 +218,7 @@ userRoutes.post(
 
     // Vibe tags changed -> recompute FOF (tag Jaccard is 30% of the score)
     void enqueue("discovery/recompute-fof-user", { userId: user.id }).catch(
-      () => {},
+      (err) => log.error({ err }, 'users FOF recompute enqueue failed'),
     );
 
     return c.json({ ok: true, count: tagIds.length });
@@ -301,31 +315,15 @@ userRoutes.get("/me/invite-link", async (c) => {
 });
 
 // POST /api/users/me/avatar-upload-url -- get Supabase signed URL to upload a profile photo
-userRoutes.post("/me/avatar-upload-url", async (c) => {
+userRoutes.post("/me/avatar-upload-url", zValidator("json", avatarUploadSchema), async (c) => {
   const me = c.get("user");
   if (!me) return c.json({ error: "Unauthorized" }, 401);
 
-  const rl = rateLimiter.check(
-    `${me.id}:avatar-upload`,
-    API_LIMITS.avatarUpload.limit,
-    API_LIMITS.avatarUpload.windowMs,
-  );
-  if (!rl.allowed) {
-    c.header(
-      "Retry-After",
-      String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
-    );
-    return c.json({ error: "Too many requests. Try again shortly." }, 429);
-  }
+  const limited = rateLimit(c, `${me.id}:avatar-upload`, API_LIMITS.avatarUpload.limit, API_LIMITS.avatarUpload.windowMs);
+  if (limited) return limited;
 
-  const body = await c.req.json<{ ext?: string; contentType?: string }>();
-  const ext = (body.ext ?? "jpg").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  const contentType = body.contentType ?? "image/jpeg";
-
-  const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic"];
-  if (!allowed.includes(contentType)) {
-    return c.json({ error: "Unsupported image type" }, 400);
-  }
+  const { ext: rawExt, contentType } = c.req.valid("json");
+  const ext = rawExt.replace(/[^a-z0-9]/gi, "").toLowerCase();
 
   // Always overwrite the same path -- one avatar per user
   const path = `${me.id}/avatar.${ext}`;
@@ -335,7 +333,7 @@ userRoutes.post("/me/avatar-upload-url", async (c) => {
     .createSignedUploadUrl(path, { upsert: true });
 
   if (error || !data) {
-    console.error("[avatar] Failed to create upload URL:", error);
+    log.error({ err: error, userId: me.id }, 'avatar upload URL creation failed');
     return c.json({ error: "Could not create upload URL" }, 500);
   }
 
@@ -392,16 +390,13 @@ userRoutes.get("/:userId/public", async (c) => {
 });
 
 // POST /api/users/me/push-token -- register Expo push token for this device
-userRoutes.post("/me/push-token", async (c) => {
+userRoutes.post("/me/push-token", zValidator("json", pushTokenSchema), async (c) => {
   const me = c.get("user");
   if (!me) return c.json({ error: "Unauthorized" }, 401);
-  const body = await c.req.json<{ token?: string }>();
-  if (!body.token || !body.token.startsWith("ExponentPushToken[")) {
-    return c.json({ error: "Invalid push token format" }, 400);
-  }
+  const { token } = c.req.valid("json");
   await db
     .update(users)
-    .set({ expoPushToken: body.token })
+    .set({ expoPushToken: token })
     .where(eq(users.id, me.id));
   return c.json({ ok: true });
 });
@@ -417,7 +412,7 @@ userRoutes.delete("/me", async (c) => {
     await supabaseAdmin.storage
       .from(AVATARS_BUCKET)
       .remove(avatarExts.map((ext) => `${me.id}/avatar.${ext}`))
-      .catch(() => {});
+      .catch((err) => log.error({ err, userId: me.id }, 'avatar cleanup failed'));
 
     // 2. Anonymise the user row — wipe all PII, mark as deleted
     //    Messages/chats remain so other users see "Deleted User" attribution
@@ -459,7 +454,7 @@ userRoutes.delete("/me", async (c) => {
 
     return c.json({ ok: true });
   } catch (err) {
-    console.error("[delete-account] Error:", err);
+    log.error({ err, userId: me.id }, 'delete account failed');
     return c.json({ error: "Failed to delete account" }, 500);
   }
 });
@@ -575,7 +570,8 @@ userPublicRoutes.post(
   ),
   async (c) => {
     const { email, reason } = c.req.valid("json");
-    const adminEmail = process.env.ADMIN_EMAIL ?? "marwanmashaly@gmail.com";
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (!adminEmail) return c.json({ error: "Service unavailable" }, 503);
 
     try {
       if (process.env.RESEND_API_KEY) {
@@ -613,15 +609,13 @@ userPublicRoutes.post(
         `,
         });
       } else {
-        console.log(
-          `[deletion-request] No RESEND_API_KEY — request from ${email} logged only`,
-        );
+        log.warn({ email: email.slice(0, 3) + '***' }, 'deletion-request: no RESEND_API_KEY, logged only');
       }
 
-      console.log(`[deletion-request] Received from ${email.slice(0, 3)}***`);
+      log.info({ email: email.slice(0, 3) + '***' }, 'deletion-request received');
       return c.json({ ok: true });
     } catch (err) {
-      console.error("[deletion-request] Error:", err);
+      log.error({ err }, 'deletion-request failed');
       return c.json({ error: "Failed to submit request" }, 500);
     }
   },

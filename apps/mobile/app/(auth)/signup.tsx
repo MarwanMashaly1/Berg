@@ -13,15 +13,13 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { Colors, Fonts } from '../../constants/theme';
+import { Fonts, C } from '../../constants/theme';
 import { GrainTexture } from '../../components/ui/GrainTexture';
 import { authClient } from '../../lib/auth';
 import { captureError } from '../../lib/analytics';
 
 // Apple Sign-In is iOS-only — guard both import and usage
 const isIOS = Platform.OS === 'ios';
-
-const C = Colors.light;
 
 export default function SignUpScreen() {
   const { error } = useLocalSearchParams<{ error?: string }>();
@@ -76,7 +74,6 @@ export default function SignUpScreen() {
     try {
       const callbackURL = Linking.createURL('/');
       console.log('[google] callbackURL:', callbackURL);
-      console.log('[google] API baseURL:', process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000 (fallback)');
       console.log('[google] calling authClient.signIn.social...');
       const result = await authClient.signIn.social({ provider: 'google', callbackURL });
       console.log('[google] signIn.social resolved:', JSON.stringify(result));

@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../constants/theme';
+import { C, Fonts } from '../../constants/theme';
 
 // expo-contacts requires a native build — guard against missing native module
 let Contacts: typeof import('expo-contacts') | null = null;
@@ -16,8 +16,6 @@ try {
 }
 import { Avatar } from '../../components/ui/Avatar';
 import { searchUsers, requestConnection, syncContacts, type UserSearchResult } from '../../lib/api';
-
-const C = Colors.light;
 
 function normalizePhone(raw: string): string | null {
   let cleaned = raw.replace(/[\s\-().]/g, '');
@@ -34,20 +32,38 @@ export default function FindFriendsScreen() {
   const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [contactMatches, setContactMatches] = useState<UserSearchResult[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsStatus, setContactsStatus] = useState<'idle' | 'no-module' | 'no-permission' | 'synced' | 'error'>('idle');
   const [requested, setRequested] = useState<Set<string>>(new Set());
+
+  const openedSettings = useRef(false);
 
   useEffect(() => {
     loadContactMatches();
   }, []);
 
-  async function loadContactMatches() {
-    if (!Contacts) return; // native module not available in this build
+  // Re-run sync when returning from system Settings after granting permission
+  useFocusEffect(useCallback(() => {
+    if (openedSettings.current) {
+      openedSettings.current = false;
+      loadContactMatches();
+    }
+  }, []));
 
-    const { status } = await Contacts.requestPermissionsAsync();
-    if (status !== 'granted') return;
+  async function loadContactMatches() {
+    if (!Contacts) {
+      setContactsStatus('no-module');
+      return;
+    }
 
     setContactsLoading(true);
+    setContactsStatus('idle');
     try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        setContactsStatus('no-permission');
+        return;
+      }
+
       const { data } = await Contacts.getContactsAsync({
         fields: [Contacts.Fields.PhoneNumbers],
       });
@@ -60,12 +76,11 @@ export default function FindFriendsScreen() {
         }
       }
 
-      if (phones.length === 0) return;
-
-      const res = await syncContacts(phones);
+      const res = phones.length > 0 ? await syncContacts(phones) : { users: [] };
       setContactMatches(res.users);
+      setContactsStatus('synced');
     } catch {
-      // silently fail — contacts are a best-effort feature
+      setContactsStatus('error');
     } finally {
       setContactsLoading(false);
     }
@@ -97,7 +112,10 @@ export default function FindFriendsScreen() {
     try {
       await requestConnection(userId);
       setRequested((prev) => new Set(prev).add(userId));
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[find-friends] connect failed:', err);
+      Alert.alert('Could not send request', 'Please try again.');
+    }
   }
 
   function renderUser(item: UserSearchResult) {
@@ -199,7 +217,7 @@ export default function FindFriendsScreen() {
       {contactsLoading ? (
         <View style={styles.contactsLoadingWrap}>
           <ActivityIndicator color={C.primary} size="small" />
-          <Text style={styles.contactsLoadingText}>Finding contacts on Berg…</Text>
+          <Text style={styles.contactsLoadingText}>Syncing your contacts…</Text>
         </View>
       ) : contactMatches.length > 0 ? (
         <>
@@ -213,7 +231,28 @@ export default function FindFriendsScreen() {
           />
         </>
       ) : (
-        <Text style={styles.empty}>None of your contacts are on Berg yet</Text>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.empty}>
+            {contactsStatus === 'no-module'
+              ? 'Contact sync needs a new build — tap below to rebuild'
+              : contactsStatus === 'no-permission'
+              ? 'Allow contacts permission in Settings to find friends'
+              : contactsStatus === 'synced'
+              ? 'None of your contacts are on Berg yet'
+              : contactsStatus === 'error'
+              ? 'Something went wrong syncing contacts'
+              : 'Checking your contacts…'}
+          </Text>
+          {contactsStatus === 'no-permission' ? (
+            <TouchableOpacity onPress={() => { openedSettings.current = true; Linking.openSettings(); }} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Open Settings</Text>
+            </TouchableOpacity>
+          ) : contactsStatus === 'error' ? (
+            <TouchableOpacity onPress={loadContactMatches} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Try again</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       )}
     </KeyboardAvoidingView>
   );
@@ -268,12 +307,29 @@ const styles = StyleSheet.create({
     color: C.textTertiary,
   },
 
+  emptyWrap: {
+    alignItems: 'center',
+    marginTop: 32,
+    paddingHorizontal: 32,
+    gap: 12,
+  },
   empty: {
     fontFamily: Fonts.body,
     fontSize: 14,
     color: C.textTertiary,
     textAlign: 'center',
-    marginTop: 32,
+  },
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: C.border,
+  },
+  retryText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 13,
+    color: C.textSecondary,
   },
 
   row: {

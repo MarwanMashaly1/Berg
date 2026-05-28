@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
+import { Routes } from '../../../lib/routes';
 import { CircleSuggestion, joinCircle } from '../../../lib/api';
 import { CircleIcon } from '../../ui/CircleIcon';
 import { SkeletonCircleRow } from '../../ui/Skeleton';
-
-const C = Colors.light;
 
 const TOP_N = 3; // always show exactly 3 on discovery, then navigate for more
 
@@ -62,7 +61,7 @@ export function CirclesSection({ circles, loading }: Props) {
         <View style={styles.header}>
           <Text style={styles.title}>Circles to join</Text>
           {circles.length > TOP_N && (
-            <TouchableOpacity onPress={() => router.push('/(app)/discover-circles' as any)}>
+            <TouchableOpacity onPress={() => router.push(Routes.discoverCircles)}>
               <Text style={styles.seeMore}>See all {circles.length} →</Text>
             </TouchableOpacity>
           )}
@@ -105,7 +104,7 @@ export function CirclesSection({ circles, loading }: Props) {
         {remaining > 0 && (
           <TouchableOpacity
             style={styles.seeMoreRow}
-            onPress={() => router.push('/(app)/discover-circles' as any)}
+            onPress={() => router.push(Routes.discoverCircles)}
             activeOpacity={0.8}
           >
             <View style={styles.seeMoreIconWrap}>

@@ -3,8 +3,9 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { lookupCode } from '../lib/code-store.js';
 import { auth } from '../auth.js';
-import { rateLimiter, API_LIMITS } from '../lib/rate-limiter.js';
+import { rateLimit, API_LIMITS } from '../lib/rate-limiter.js';
 import { createDemoSession } from './demo-auth.js';
+import { log } from '../lib/logger.js';
 
 export const verifyCodeRoutes = new Hono();
 
@@ -21,11 +22,8 @@ verifyCodeRoutes.post('/', zValidator('json', schema), async (c) => {
 
   // Rate limit by the submitted code/token to prevent brute-force
   const rlKey = `verify-code:${(code ?? directToken ?? '').slice(0, 32)}`;
-  const rl = rateLimiter.check(rlKey, API_LIMITS.verifyCode.limit, API_LIMITS.verifyCode.windowMs);
-  if (!rl.allowed) {
-    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
-    return c.json({ error: 'Too many attempts. Try again later.' }, 429);
-  }
+  const limited = rateLimit(c, rlKey, API_LIMITS.verifyCode.limit, API_LIMITS.verifyCode.windowMs);
+  if (limited) return limited;
 
   // Demo code bypass — lets store reviewers log in without a real magic link
   const demoCode = process.env.DEMO_CODE;
@@ -57,10 +55,10 @@ verifyCodeRoutes.post('/', zValidator('json', schema), async (c) => {
 
   const setCookie = verifyResponse.headers.get('set-cookie');
   if (!setCookie) {
-    console.error('[verify-code] No set-cookie in response, status:', verifyResponse.status);
+    log.warn({ status: verifyResponse.status }, 'verify-code: no set-cookie in response');
     return c.json({ error: 'Verification failed -- token may be expired or already used' }, 400);
   }
 
-  console.log('[verify-code] Verified, returning set-cookie (first 80):', setCookie.slice(0, 80));
+  log.info('verify-code: verified successfully');
   return c.json({ setCookie });
 });

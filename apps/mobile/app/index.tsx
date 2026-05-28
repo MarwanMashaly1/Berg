@@ -3,9 +3,10 @@ import { View } from 'react-native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
-import { authClient } from '../lib/auth';
+import { useCurrentUser } from '../hooks/use-current-user';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import { Colors } from '../constants/theme';
+import { C } from '../constants/theme';
+import { Routes } from '../lib/routes';
 
 // Required for expo-web-browser openAuthSessionAsync to resolve when berg:/// arrives
 WebBrowser.maybeCompleteAuthSession();
@@ -27,36 +28,36 @@ WebBrowser.maybeCompleteAuthSession();
  *    so the timeout almost never fires in practice.
  */
 export default function Index() {
-  const { data: session, isPending } = authClient.useSession();
+  const { user, isPending } = useCurrentUser();
   const hasCachedCookie = useRef<boolean | null>(null);
   const navigated = useRef(false);
 
-  function navigateFromSession(s: typeof session) {
+  function navigateFromUser(u: typeof user) {
     if (navigated.current) return;
     navigated.current = true;
 
-    if (!s) {
+    if (!u) {
       router.replace('/(auth)/welcome');
       return;
     }
 
-    const user = s.user as any;
-    const onboardingCompleted = user?.onboardingCompleted ?? false;
+    const userAny = u as any;
+    const onboardingCompleted = userAny?.onboardingCompleted ?? false;
 
     if (!onboardingCompleted) {
-      const step = parseInt(user?.onboardingStep ?? '0', 10);
+      const step = parseInt(userAny?.onboardingStep ?? '0', 10);
       const nextStep = Math.min(step + 1, 6);
-      router.replace(`/(app)/onboarding/step-${nextStep}` as any);
+      router.replace(Routes.onboarding(nextStep as 1|2|3|4|5|6));
     } else {
-      router.replace('/(app)/(tabs)/discovery');
+      router.replace(Routes.discovery);
     }
   }
 
   // Step 2: navigate once BetterAuth resolves
   useEffect(() => {
     if (isPending) return;
-    navigateFromSession(session);
-  }, [session, isPending]);
+    navigateFromUser(user);
+  }, [user, isPending]);
 
   // Smart timeout — starts AFTER SecureStore resolves so the delay is correct:
   // - No stored cookie → 6s  (first-time / signed-out user)
@@ -79,7 +80,7 @@ export default function Index() {
           if (navigated.current) return;
           navigated.current = true;
           if (hasCachedCookie.current) {
-            router.replace('/(app)/(tabs)/discovery');
+            router.replace(Routes.discovery);
           } else {
             router.replace('/(auth)/welcome');
           }
@@ -93,12 +94,12 @@ export default function Index() {
     <View
       style={{
         flex: 1,
-        backgroundColor: Colors.light.backgroundWarm,
+        backgroundColor: C.backgroundWarm,
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <LoadingSpinner size="large" color={Colors.light.primary} />
+      <LoadingSpinner size="large" color={C.primary} />
     </View>
   );
 }

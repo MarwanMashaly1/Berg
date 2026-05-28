@@ -2,11 +2,9 @@ import { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Fonts } from '../../../constants/theme';
+import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { patchUser } from '../../../lib/api';
-
-const C = Colors.light;
 
 export default function Step6() {
   const [saving, setSaving] = useState(false);

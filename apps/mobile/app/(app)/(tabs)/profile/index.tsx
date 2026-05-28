@@ -1,129 +1,84 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Modal, Share, RefreshControl, Platform,
+  RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import QRCode from 'react-native-qrcode-svg';
-import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { authClient } from '../../../../lib/auth';
-import { Colors, Fonts } from '../../../../constants/theme';
+import { useCurrentUser } from '../../../../hooks/use-current-user';
+import { C, Fonts } from '../../../../constants/theme';
+import { Routes } from '../../../../lib/routes';
 import { Avatar } from '../../../../components/ui/Avatar';
 import {
-  getProfileStats, getProfileConnections, getProfileCircles, getInviteLink,
-  patchUser, requestConnection, getPublicUser, getUserMe,
-  ProfileStats, ProfileConnection, ProfileCircle, InviteLink,
+  getProfileStats, getProfileConnections, getProfileCircles, getInviteLink, getUserMe,
+  patchUser,
 } from '../../../../lib/api';
+import { QK } from '../../../../lib/hooks/queries';
 import { CircleIcon } from '../../../../components/ui/CircleIcon';
-
-const C = Colors.light;
-const AVAIL_OPTIONS = [
-  { value: 'down_to_hang', emoji: '🟢', label: 'Down to hang', color: '#2D6A4F', bg: 'rgba(45,106,79,0.12)' },
-  { value: 'ask_me',       emoji: '🟡', label: 'Ask me',       color: '#B7791F', bg: 'rgba(183,121,31,0.12)' },
-  { value: 'busy',         emoji: '🔴', label: 'Busy',         color: '#C53030', bg: 'rgba(197,48,48,0.10)' },
-];
+import { QrModal } from '../../../../components/profile/QrModal';
+import { AvailabilityPicker, AVAIL_OPTIONS } from '../../../../components/profile/AvailabilityPicker';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { data: session } = authClient.useSession();
-  const user = session?.user as any;
+  const { user: currentUser } = useCurrentUser();
+  const user = currentUser as any;
+  const qc = useQueryClient();
 
-  const [stats, setStats] = useState<ProfileStats | null>(null);
-  const [connections, setConnections] = useState<ProfileConnection[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [circles, setCircles] = useState<ProfileCircle[]>([]);
-  const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [showQR, setShowQR] = useState(false);
-  const [qrTab, setQrTab] = useState<'my' | 'scan'>('my');
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [scanResult, setScanResult] = useState<{ userId: string; name: string | null; image: string | null } | null>(null);
-  const [scanSending, setScanSending] = useState(false);
-  const [scanDone, setScanDone] = useState<'success' | 'error' | null>(null);
-  const [scanMessage, setScanMessage] = useState('');
-  const scanCooldown = useRef(false);
   const [showAvailPicker, setShowAvailPicker] = useState(false);
   const [availability, setAvailability] = useState<string>(user?.availabilityStatus ?? 'down_to_hang');
-  const [profileData, setProfileData] = useState<any>(null);
 
-  const loadAll = useCallback(async () => {
-    const [s, c, ci, il] = await Promise.allSettled([
-      getProfileStats(), getProfileConnections(), getProfileCircles(), getInviteLink(),
-    ]);
-    if (s.status === 'fulfilled') setStats(s.value);
-    if (c.status === 'fulfilled') {
-      setConnections(c.value.confirmed.slice(0, 4));
-      setPendingCount(c.value.pending.length);
-    }
-    if (ci.status === 'fulfilled') setCircles(ci.value.joined.slice(0, 3));
-    if (il.status === 'fulfilled') setInviteLink(il.value);
-    const pd = await getUserMe().catch(() => null);
-    if (pd?.user) setProfileData(pd.user);
-    setLoading(false);
-  }, []);
+  const enabled = !!currentUser;
+  const { data: statsData, isLoading: statsLoading, isRefetching: statsRefetching, refetch: refetchStats } = useQuery({
+    queryKey: QK.profileStats(), queryFn: () => getProfileStats(), enabled,
+  });
+  const { data: connectionsData, isLoading: connsLoading, refetch: refetchConns } = useQuery({
+    queryKey: QK.connections(), queryFn: () => getProfileConnections(), enabled,
+  });
+  const { data: circlesData, isLoading: circlesLoading, refetch: refetchCircles } = useQuery({
+    queryKey: QK.circles(), queryFn: () => getProfileCircles(), enabled,
+  });
+  const { data: inviteLinkData } = useQuery({
+    queryKey: ['invite-link'], queryFn: () => getInviteLink(), enabled, staleTime: Infinity,
+  });
+  const { data: profileDataRes, isLoading: profileLoading, refetch: refetchProfile } = useQuery({
+    queryKey: QK.profile(), queryFn: () => getUserMe(), enabled, staleTime: 2 * 60 * 1000,
+  });
+
+  const loading = statsLoading || connsLoading || circlesLoading || profileLoading;
+  const isRefetching = statsRefetching;
+  const stats = statsData ?? null;
+  const connections = connectionsData?.confirmed.slice(0, 4) ?? [];
+  const pendingCount = connectionsData?.pending.length ?? 0;
+  const circles = circlesData?.joined.slice(0, 3) ?? [];
+  const inviteLink = inviteLinkData ?? null;
+  const profileData = profileDataRes?.user ?? null;
 
   useEffect(() => {
     if (profileData?.availabilityStatus) setAvailability(profileData.availabilityStatus);
   }, [profileData?.availabilityStatus]);
 
-  // Initial load — wait for session to avoid 401
-  useEffect(() => { if (session) loadAll(); }, [session, loadAll]);
-
   // Reload when tab comes into focus (catches circle joins, connection accepts, etc.)
   useFocusEffect(useCallback(() => {
-    if (session) loadAll();
-  }, [session, loadAll]));
+    if (!currentUser) return;
+    refetchStats();
+    refetchConns();
+    refetchCircles();
+    refetchProfile();
+  }, [currentUser, refetchStats, refetchConns, refetchCircles, refetchProfile]));
 
   async function handleRefresh() {
-    setRefreshing(true);
-    await loadAll();
-    setRefreshing(false);
+    await Promise.all([refetchStats(), refetchConns(), refetchCircles(), refetchProfile()]);
   }
 
   async function handleAvailability(value: string) {
     setAvailability(value);
     setShowAvailPicker(false);
     await patchUser({ availabilityStatus: value });
-  }
-
-  async function handleQRScan({ data }: BarcodeScanningResult) {
-    if (scanCooldown.current || scanResult) return;
-    // Parse berg://connect/{userId}
-    const match = data.match(/^berg:\/\/connect\/([a-z0-9_-]+)$/i);
-    if (!match) return;
-    const scannedUserId = match[1];
-    if (scannedUserId === user?.id) return; // can't connect with yourself
-    scanCooldown.current = true;
-    try {
-      const { user: scannedUser } = await getPublicUser(scannedUserId);
-      if (scannedUser.connectionStatus === 'confirmed') {
-        setScanMessage(`You're already connected with ${scannedUser.name ?? 'this person'}!`);
-        setScanDone('success');
-      } else {
-        setScanResult({ userId: scannedUserId, name: scannedUser.name, image: scannedUser.image });
-      }
-    } catch {
-      scanCooldown.current = false;
-    }
-  }
-
-  async function handleSendRequest() {
-    if (!scanResult) return;
-    setScanSending(true);
-    try {
-      await requestConnection(scanResult.userId);
-      setScanMessage(`Request sent to ${scanResult.name ?? 'this person'}!`);
-      setScanDone('success');
-    } catch (e: any) {
-      setScanMessage(e.message ?? 'Could not send request.');
-      setScanDone('error');
-    } finally {
-      setScanSending(false);
-    }
   }
 
   const currentAvail = AVAIL_OPTIONS.find(o => o.value === availability) ?? AVAIL_OPTIONS[0];
@@ -136,7 +91,7 @@ export default function ProfileScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={C.primary} />}
       >
         {/* Dark hero header */}
         <View style={styles.header}>
@@ -153,18 +108,7 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
             {showAvailPicker && (
-              <View style={styles.availPicker}>
-                {AVAIL_OPTIONS.map(opt => (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[styles.availPickerOption, availability === opt.value && { backgroundColor: opt.bg, borderColor: opt.color }]}
-                    onPress={() => handleAvailability(opt.value)}
-                  >
-                    <Text style={styles.availPickerEmoji}>{opt.emoji}</Text>
-                    <Text style={[styles.availPickerLabel, availability === opt.value && { color: opt.color }]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <AvailabilityPicker value={availability} onChange={handleAvailability} />
             )}
           </View>
           <View style={styles.avatarBlock}>
@@ -200,7 +144,7 @@ export default function ProfileScreen() {
             </>
           ) : (
             <>
-              <TouchableOpacity style={styles.statCell} onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}>
+              <TouchableOpacity style={styles.statCell} onPress={() => router.push(Routes.profileConnections)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={styles.statNum}>{stats?.connections ?? '0'}</Text>
                   {pendingCount > 0 && (
@@ -212,7 +156,7 @@ export default function ProfileScreen() {
                 <Text style={styles.statLabel}>Connections</Text>
               </TouchableOpacity>
               <View style={styles.statDivider} />
-              <TouchableOpacity style={styles.statCell} onPress={() => router.push('/(app)/(tabs)/profile/circles' as any)}>
+              <TouchableOpacity style={styles.statCell} onPress={() => router.push(Routes.profileCircles)}>
                 <Text style={styles.statNum}>{stats?.circles ?? '0'}</Text>
                 <Text style={styles.statLabel}>Circles</Text>
               </TouchableOpacity>
@@ -231,7 +175,7 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>Connections</Text>
             <TouchableOpacity
               style={pendingCount > 0 ? styles.pendingNudge : undefined}
-              onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}
+              onPress={() => router.push(Routes.profileConnections)}
             >
               {pendingCount > 0 ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -255,7 +199,7 @@ export default function ProfileScreen() {
               ))}
             </View>
           ) : connections.length === 0 ? (
-            <TouchableOpacity onPress={() => router.push('/(app)/find-friends' as any)}>
+            <TouchableOpacity onPress={() => router.push(Routes.findFriends)}>
               <Text style={styles.emptyLink}>Find your first connection →</Text>
             </TouchableOpacity>
           ) : (
@@ -264,7 +208,7 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   key={conn.id}
                   style={[styles.connAvatar, i > 0 && { marginLeft: -6 }]}
-                  onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}
+                  onPress={() => router.push(Routes.profileConnections)}
                   activeOpacity={0.75}
                 >
                   <Avatar
@@ -280,7 +224,7 @@ export default function ProfileScreen() {
               {(stats?.connections ?? 0) > 4 && (
                 <TouchableOpacity
                   style={[styles.connAvatar, { marginLeft: -6 }]}
-                  onPress={() => router.push('/(app)/(tabs)/profile/connections' as any)}
+                  onPress={() => router.push(Routes.profileConnections)}
                   activeOpacity={0.75}
                 >
                   <View style={[styles.connAvatarCircle, { backgroundColor: '#F0ECE8' }]}>
@@ -296,7 +240,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Your circles</Text>
-            <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/profile/circles' as any)}>
+            <TouchableOpacity onPress={() => router.push(Routes.profileCircles)}>
               <Text style={styles.sectionLink}>See all</Text>
             </TouchableOpacity>
           </View>
@@ -308,7 +252,7 @@ export default function ProfileScreen() {
               ))}
             </View>
           ) : circles.length === 0 ? (
-            <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/profile/circles' as any)}>
+            <TouchableOpacity onPress={() => router.push(Routes.profileCircles)}>
               <Text style={styles.emptyLink}>Join a circle →</Text>
             </TouchableOpacity>
           ) : (
@@ -331,12 +275,12 @@ export default function ProfileScreen() {
 
         {/* Settings block */}
         <View style={styles.settingsBlock}>
-          <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/(app)/(tabs)/profile/edit' as any)}>
+          <TouchableOpacity style={styles.settingsRow} onPress={() => router.push(Routes.profileEdit)}>
             <MaterialIcons name="edit" size={20} color={C.textSecondary} />
             <Text style={styles.settingsLabel}>Edit profile</Text>
             <MaterialIcons name="chevron-right" size={20} color={C.textTertiary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/(app)/(tabs)/profile/settings' as any)}>
+          <TouchableOpacity style={styles.settingsRow} onPress={() => router.push(Routes.profileSettings)}>
             <MaterialIcons name="tune" size={20} color={C.textSecondary} />
             <Text style={styles.settingsLabel}>Settings</Text>
             <MaterialIcons name="chevron-right" size={20} color={C.textTertiary} />
@@ -348,161 +292,15 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* QR / Scan Modal */}
-      <Modal
+      <QrModal
         visible={showQR}
-        animationType="slide"
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={() => { setShowQR(false); setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; setQrTab('my'); }}
-      >
-        <View style={styles.qrModal}>
-          {/* Header */}
-          <View style={[styles.qrModalHeader, { paddingTop: Math.max(insets.top + 8, 20) }]}>
-            <TouchableOpacity
-              style={styles.qrModalBack}
-              onPress={() => { setShowQR(false); setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; setQrTab('my'); }}
-            >
-              <Text style={styles.qrModalBackText}>Close</Text>
-            </TouchableOpacity>
-            {/* Tab toggle */}
-            <View style={styles.qrTabBar}>
-              <TouchableOpacity
-                style={[styles.qrTab, qrTab === 'my' && styles.qrTabActive]}
-                onPress={() => setQrTab('my')}
-              >
-                <Text style={[styles.qrTabText, qrTab === 'my' && styles.qrTabTextActive]}>My Code</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.qrTab, qrTab === 'scan' && styles.qrTabActive]}
-                onPress={async () => {
-                  if (!cameraPermission?.granted) await requestCameraPermission();
-                  setScanResult(null);
-                  scanCooldown.current = false;
-                  setQrTab('scan');
-                }}
-              >
-                <Text style={[styles.qrTabText, qrTab === 'scan' && styles.qrTabTextActive]}>Scan</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ width: 52 }} />
-          </View>
-
-          {/* My Code tab */}
-          {qrTab === 'my' && (
-            <View style={styles.qrContent}>
-              <Avatar name={displayName} userId={user?.id} uri={user?.image ?? undefined} size="xl" style={styles.qrAvatar} />
-              <Text style={styles.qrName}>{displayName}</Text>
-              {username ? <Text style={styles.qrUsername}>@{username}</Text> : null}
-              {user?.id ? (
-                <>
-                  <View style={styles.qrBox}>
-                    {/* QR value = berg://connect/{userId} — unique per user */}
-                    <QRCode
-                      value={`berg://connect/${user.id}`}
-                      size={160}
-                      color="#1a1a1a"
-                      backgroundColor="#fff"
-                    />
-                  </View>
-                  <Text style={styles.qrHint}>
-                    Ask friends to scan this to connect with you
-                  </Text>
-                  {inviteLink && (
-                    <TouchableOpacity
-                      style={styles.qrShareBtn}
-                      onPress={() => Share.share({ message: `Add me on Berg!\n${inviteLink.url}` })}
-                    >
-                      <Text style={styles.qrShareText}>Share invite link</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              ) : (
-                <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontFamily: Fonts.body }}>Loading…</Text>
-              )}
-            </View>
-          )}
-
-          {/* Scan tab */}
-          {qrTab === 'scan' && (
-            <View style={{ flex: 1 }}>
-              {cameraPermission?.granted ? (
-                scanResult ? (
-                  scanDone ? (
-                    // Success / error result card
-                    <View style={styles.scanConfirm}>
-                      <View style={[styles.scanResultIcon, scanDone === 'success' ? styles.scanResultIconSuccess : styles.scanResultIconError]}>
-                        <Text style={styles.scanResultIconText}>{scanDone === 'success' ? '✓' : '!'}</Text>
-                      </View>
-                      <Text style={styles.scanConfirmName}>
-                        {scanDone === 'success' ? 'Request sent!' : 'Hmm, something went wrong'}
-                      </Text>
-                      <Text style={styles.scanConfirmSub}>{scanMessage}</Text>
-                      <TouchableOpacity
-                        style={[styles.qrShareBtn, { marginTop: 28 }]}
-                        onPress={() => { setShowQR(false); setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; setQrTab('my'); }}
-                      >
-                        <Text style={styles.qrShareText}>Done</Text>
-                      </TouchableOpacity>
-                      {scanDone === 'error' && (
-                        <TouchableOpacity
-                          style={styles.scanRetry}
-                          onPress={() => { setScanResult(null); setScanDone(null); setScanMessage(''); scanCooldown.current = false; }}
-                        >
-                          <Text style={styles.scanRetryText}>Try again</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ) : (
-                  // Show confirmation after successful scan
-                  <View style={styles.scanConfirm}>
-                    <Avatar name={scanResult.name} userId={scanResult.userId} uri={scanResult.image ?? undefined} size="xl" style={{ marginBottom: 16 }} />
-                    <Text style={styles.scanConfirmName}>{scanResult.name ?? 'Someone'}</Text>
-                    <Text style={styles.scanConfirmSub}>Send them a connection request?</Text>
-                    <TouchableOpacity
-                      style={[styles.qrShareBtn, { marginTop: 24 }]}
-                      onPress={handleSendRequest}
-                      disabled={scanSending}
-                    >
-                      <Text style={styles.qrShareText}>
-                        {scanSending ? 'Sending…' : 'Send connection request'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.scanRetry}
-                      onPress={() => { setScanResult(null); scanCooldown.current = false; }}
-                    >
-                      <Text style={styles.scanRetryText}>Scan again</Text>
-                    </TouchableOpacity>
-                  </View>
-                  )
-                ) : (
-                  // Camera viewfinder
-                  <View style={{ flex: 1 }}>
-                    <CameraView
-                      style={{ flex: 1 }}
-                      facing="back"
-                      onBarcodeScanned={handleQRScan}
-                      barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                    />
-                    <View style={styles.scanOverlay}>
-                      <View style={styles.scanFrame} />
-                      <Text style={styles.scanHint}>Point at an Berg QR code</Text>
-                    </View>
-                  </View>
-                )
-              ) : (
-                <View style={styles.scanConfirm}>
-                  <Text style={styles.scanConfirmName}>Camera access needed</Text>
-                  <Text style={styles.scanConfirmSub}>Allow camera access to scan QR codes</Text>
-                  <TouchableOpacity style={[styles.qrShareBtn, { marginTop: 20 }]} onPress={requestCameraPermission}>
-                    <Text style={styles.qrShareText}>Allow camera</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-      </Modal>
+        onClose={() => setShowQR(false)}
+        userId={user?.id ?? ''}
+        inviteUrl={inviteLink?.url ?? null}
+        displayName={displayName}
+        username={username}
+        userImage={user?.image}
+      />
     </View>
   );
 }
@@ -565,29 +363,6 @@ const styles = StyleSheet.create({
   availText: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 11,
-  },
-  availPicker: { marginTop: 10, flexDirection: 'row', gap: 6 },
-  availPickerOption: {
-    flex: 1,
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    gap: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  availPickerEmoji: { fontSize: 16 },
-  availPickerLabel: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 10,
-    color: 'rgba(242,232,220,0.5)',
-    textAlign: 'center',
   },
   avatarBlock: { alignItems: 'center', gap: 8 },
   avatar: {
@@ -796,159 +571,5 @@ const styles = StyleSheet.create({
     flex: 1,
     color: C.text,
     letterSpacing: -0.1,
-  },
-
-  // ── QR modal (stays dark) ──
-  qrModal: { flex: 1, backgroundColor: '#111111' },
-  qrModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  qrModalBack: {},
-  qrModalBackText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
-    width: 52,
-  },
-  // Tab toggle — dark-mode styling
-  qrTabBar: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    padding: 3,
-  },
-  qrTab: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 8 },
-  qrTabActive: { backgroundColor: 'rgba(255,255,255,0.15)' },
-  qrTabText: { fontFamily: Fonts.bodySemiBold, fontSize: 13, color: 'rgba(255,255,255,0.4)' },
-  qrTabTextActive: { color: '#fff' },
-  // My code content
-  qrContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 36,
-    paddingBottom: 60,
-  },
-  qrAvatar: { marginBottom: 16 },
-  qrName: {
-    fontFamily: Fonts.heading,
-    fontSize: 26,
-    color: C.textInverse,
-    marginBottom: 4,
-    letterSpacing: -0.5,
-    fontStyle: 'italic',
-  },
-  qrUsername: {
-    fontFamily: Fonts.body,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.4)',
-    marginBottom: 24,
-  },
-  qrBox: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  qrHint: {
-    fontFamily: Fonts.body,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.35)',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 19,
-  },
-  qrShareBtn: {
-    backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 15,
-    paddingHorizontal: 36,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  qrShareText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 15,
-    color: C.textInverse,
-    letterSpacing: 0.2,
-    textAlign: 'center',
-  },
-  // Scan tab
-  scanOverlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scanFrame: {
-    width: 220,
-    height: 220,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: C.primary,
-    shadowColor: C.primary,
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  scanHint: {
-    fontFamily: Fonts.body,
-    fontSize: 13,
-    color: C.textInverse,
-    marginTop: 20,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  scanConfirm: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 36,
-  },
-  scanConfirmName: {
-    fontFamily: Fonts.heading,
-    fontSize: 24,
-    color: C.textInverse,
-    fontStyle: 'italic',
-    marginBottom: 8,
-    letterSpacing: -0.4,
-  },
-  scanConfirmSub: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.45)',
-    textAlign: 'center',
-  },
-  scanRetry: { marginTop: 16, padding: 12 },
-  scanRetryText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.4)',
-  },
-  scanResultIcon: {
-    width: 72, height: 72, borderRadius: 36,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 20,
-  },
-  scanResultIconSuccess: { backgroundColor: 'rgba(45,106,79,0.25)', borderWidth: 2, borderColor: '#2D6A4F' },
-  scanResultIconError: { backgroundColor: 'rgba(197,48,48,0.2)', borderWidth: 2, borderColor: '#C53030' },
-  scanResultIconText: {
-    fontFamily: Fonts.heading,
-    fontSize: 32,
-    color: C.textInverse,
   },
 });
