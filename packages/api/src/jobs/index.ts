@@ -7,6 +7,7 @@ import { handleRecomputeFofUser, handleRecomputeFofAll } from './recompute-fof.j
 import { handleGeneratePrompts } from './generate-prompts.js';
 import { handleSelectDailyPrompt } from './select-daily-prompt.js';
 import { handleMotiveAutoArchive } from './motive-auto-archive.js';
+import { log } from '../lib/logger.js';
 
 /**
  * Register all pg-boss workers and cron jobs. Called once at server startup.
@@ -111,5 +112,5 @@ export async function startWorkers(): Promise<void> {
     async () => { await handleSelectDailyPrompt(); },
   );
 
-  console.log('[workers] All workers registered (notifications + discovery + prompts)');
+  log.info('workers: all workers registered');
 }

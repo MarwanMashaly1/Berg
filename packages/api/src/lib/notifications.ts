@@ -13,6 +13,18 @@ const pendingPushes = new Map<string, PendingPush>();
 const PUSH_DEBOUNCE_MS = 3_000;
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const PUSH_TIMEOUT_MS = 8_000;
+
+function pushFetch(body: unknown): Promise<Response> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), PUSH_TIMEOUT_MS);
+  return fetch(EXPO_PUSH_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+    signal: ac.signal,
+  }).finally(() => clearTimeout(t));
+}
 
 export type PushPayload = {
   title: string;
@@ -58,16 +70,12 @@ export async function sendPush(userId: string, payload: PushPayload): Promise<vo
   const tokens = await getTokens([userId]);
   if (tokens.length === 0) return;
 
-  await fetch(EXPO_PUSH_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      to: tokens[0].token,
-      sound: 'default',
-      title: payload.title,
-      body: payload.body,
-      data: payload.data ?? {},
-    }),
+  await pushFetch({
+    to: tokens[0].token,
+    sound: 'default',
+    title: payload.title,
+    body: payload.body,
+    data: payload.data ?? {},
   }).catch((e) => console.error('[push] single send failed:', e));
 }
 
@@ -97,11 +105,8 @@ export async function sendPushBatch(userIds: string[], payload: PushPayload): Pr
   }));
 
   for (let i = 0; i < messages.length; i += 100) {
-    await fetch(EXPO_PUSH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(messages.slice(i, i + 100)),
-    }).catch((e) => console.error('[push] batch send failed:', e));
+    await pushFetch(messages.slice(i, i + 100))
+      .catch((e) => console.error('[push] batch send failed:', e));
   }
 }
 
@@ -145,11 +150,8 @@ export async function debouncedChatPush(
       tag: collapseKey,
     }));
     for (let i = 0; i < messages.length; i += 100) {
-      await fetch(EXPO_PUSH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(messages.slice(i, i + 100)),
-      }).catch((e) => console.error('[push] debounced batch failed:', e));
+      await pushFetch(messages.slice(i, i + 100))
+        .catch((e) => console.error('[push] debounced batch failed:', e));
     }
   }, PUSH_DEBOUNCE_MS);
 

@@ -35,6 +35,15 @@ class PlacesCache {
     this.store.set(key, { data, expiresAt: Date.now() + ttlMs });
   }
 
+  /** Cache-aside: returns { data, hit }. Caller sets X-Cache header. */
+  async wrap<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<{ data: T; hit: boolean }> {
+    const cached = this.get<T>(key);
+    if (cached !== null) return { data: cached, hit: true };
+    const data = await fn();
+    this.set(key, data, ttlMs);
+    return { data, hit: false };
+  }
+
   private maybeGc(): void {
     if (Date.now() - this.lastGc < 5 * 60 * 1000) return;
     for (const [k, v] of this.store) {

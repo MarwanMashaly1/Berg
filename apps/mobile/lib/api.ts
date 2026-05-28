@@ -1,6 +1,8 @@
 import { QueryClient } from '@tanstack/react-query';
 import { authClient } from './auth';
 import * as SecureStore from 'expo-secure-store';
+import { router } from 'expo-router';
+import { Config } from './config';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,26 +19,12 @@ export const queryClient = new QueryClient({
 });
 
 /**
- * Default to the real deployed API in production builds.
- *
- * Rationale:
- * - In EAS builds, EXPO_PUBLIC_* vars are compiled into the JS bundle.
- * - If EXPO_PUBLIC_API_URL is missing in a production binary/update, falling back
- *   to localhost will break on-device and can cascade into an ErrorBoundary.
- */
-const DEFAULT_API_URL = __DEV__
-  ? 'http://localhost:3000'
-  : 'https://berg-api.onrender.com';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL;
-
-/**
  * Authenticated fetch wrapper.
  * Attaches the BetterAuth session cookie/bearer token automatically.
  */
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit & { phoneSessionId?: string } = {}
+  options: RequestInit & { phoneSessionId?: string; signal?: AbortSignal } = {}
 ): Promise<T> {
   const { phoneSessionId, ...fetchOptions } = options;
 
@@ -58,7 +46,7 @@ export async function apiFetch<T>(
     console.log(
       '[apiFetch]',
       fetchOptions.method ?? 'GET',
-      `${API_URL}${path}`,
+      `${Config.apiUrl}${path}`,
       'cookie:',
       cookies ? cookies.slice(0, 60) : 'none',
       '| raw:',
@@ -66,7 +54,7 @@ export async function apiFetch<T>(
     );
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${Config.apiUrl}${path}`, {
     ...fetchOptions,
     headers,
   });
@@ -74,6 +62,14 @@ export async function apiFetch<T>(
   if (!response.ok) {
     const body = await response.text().catch(() => '');
     if (__DEV__) console.error('[apiFetch] non-ok', response.status, JSON.stringify(body).slice(0, 200));
+
+    if (response.status === 401) {
+      // Session expired — sign out and send user back to the root/login screen
+      await authClient.signOut().catch(() => {});
+      router.replace('/');
+      throw new Error('Session expired. Please sign in again.');
+    }
+
     let message: string;
     try {
       const json = JSON.parse(body);
@@ -117,7 +113,24 @@ export function markNotificationRead(id: string) {
 // ─── Push token ─────────────────────────────────────────────────────────�[...]
 
 export function getUserMe() {
-  return apiFetch<{ user: { id: string; name: string | null; displayName: string | null; username: string | null; bio: string | null; image: string | null; availabilityStatus: string; onboardingC[...]
+  return apiFetch<{
+    user: {
+      id: string;
+      name: string | null;
+      email: string | null;
+      displayName: string | null;
+      username: string | null;
+      bio: string | null;
+      image: string | null;
+      availabilityStatus: string;
+      onboardingStep: string | null;
+      onboardingCompleted: boolean | null;
+      notifyPromptMatches: boolean | null;
+      notifyCircleRequests: boolean | null;
+      notifyMotiveInvites: boolean | null;
+      showInDiscovery: boolean | null;
+    } | null;
+  }>('/api/users/me');
 }
 
 export function getPublicUser(userId: string) {
@@ -355,7 +368,7 @@ export type ProfileCircle = {
   coverImage: string | null;
   memberCount: number;
   friendsInsideCount: number;
-  memberPreviews: A[...]
+  memberPreviews: Array<{ id: string; name: string | null; image: string | null }>;
 };
 export type InviteLink = { code: string; url: string };
 
@@ -467,7 +480,7 @@ export async function uploadCircleImage(circleId: string, localUri: string, mime
   const cookies = authClient.getCookie();
   const formData = new FormData();
   formData.append('image', { uri: localUri, type: mimeType, name: 'cover.jpg' } as any);
-  const res = await fetch(`${API_URL}/api/circles/${circleId}/image`, {
+  const res = await fetch(`${Config.apiUrl}/api/circles/${circleId}/image`, {
     method: 'POST',
     headers: cookies ? { Cookie: cookies } : undefined,
     body: formData,

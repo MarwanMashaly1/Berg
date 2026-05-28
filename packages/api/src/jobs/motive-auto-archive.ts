@@ -1,6 +1,7 @@
 ﻿import { db } from '../db.js';
 import { motives } from '@berg/shared';
 import { and, inArray, lt, isNotNull } from 'drizzle-orm';
+import { log } from '../lib/logger.js';
 
 /**
  * Daily cleanup: mark motives as 'past' when their scheduled time has passed.
@@ -29,7 +30,6 @@ export async function handleMotiveAutoArchive(): Promise<void> {
     .returning({ id: motives.id, title: motives.title });
 
   if (stale.length > 0) {
-    console.log(`[motive/auto-archive] Marked ${stale.length} stale motives as past:`,
-      stale.map(m => m.title).join(', '));
+    log.info({ count: stale.length }, 'motive-auto-archive: marked stale motives as past');
   }
 }

@@ -2,6 +2,8 @@
 import { dailyPrompts } from '@berg/shared';
 import { eq, isNull, and, ne, desc, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
+import { log } from '../lib/logger.js';
+import { createEmailToken } from '../lib/admin-token.js';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -28,7 +30,7 @@ export async function handleSelectDailyPrompt(): Promise<void> {
     .limit(1);
 
   if (existing.length > 0) {
-    console.log(`[prompts] Today (${today}) already has a prompt -- skipping`);
+    log.info({ today }, 'prompts: daily prompt already assigned, skipping');
     return;
   }
 
@@ -76,7 +78,7 @@ export async function handleSelectDailyPrompt(): Promise<void> {
     );
 
   if (candidates.length === 0) {
-    console.error('[prompts] No approved prompts available! Bank is empty -- please review drafts.');
+    log.error({ today }, 'prompts: bank empty — no approved prompts available');
     // Alert the admin
     await notifyEmptyBank();
     return;
@@ -102,9 +104,7 @@ export async function handleSelectDailyPrompt(): Promise<void> {
     })
     .where(eq(dailyPrompts.id, selected.id));
 
-  console.log(
-    `[prompts] Selected for ${today}: "${selected.question}" (type=${selected.type}, category=${selected.category})`,
-  );
+  log.info({ today, question: selected.question, type: selected.type, category: selected.category }, 'prompts: daily prompt selected');
 
   // Archive yesterday's prompt
   const yesterday = new Date();
@@ -129,7 +129,7 @@ async function notifyEmptyBank(): Promise<void> {
     html: `
       <p>The prompt bank is empty -- no approved prompts are available for today.</p>
       <p>Please approve some draft prompts or generate a new batch.</p>
-      <p>Trigger a new batch: <a href="${process.env.API_BASE_URL}/api/admin/prompts/generate?token=${process.env.ADMIN_SECRET}">Generate now</a></p>
+      <p>Trigger a new batch: <a href="${process.env.API_BASE_URL}/api/admin/prompts/generate?t=${createEmailToken(process.env.ADMIN_SECRET!, 'generate', 'batch')}">Generate now</a></p>
     `,
-  }).catch(() => {});
+  }).catch((err) => log.error({ err }, 'prompts: notify empty bank email failed'));
 }

@@ -7,6 +7,7 @@ import { createEmailToken } from "../lib/admin-token.js";
 import { Resend } from "resend";
 import { render } from "@react-email/render";
 import { PromptReviewEmail } from "../emails/prompt-review.js";
+import { log } from "../lib/logger.js";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -186,7 +187,7 @@ const promptGeneratorModel = genAI.getGenerativeModel({
  * Job name: 'prompts/generate-batch'
  */
 export async function handleGeneratePrompts(): Promise<void> {
-  console.log("[prompts] Starting weekly batch generation");
+  log.info('prompts: starting weekly batch generation');
 
   // 1. Build prompt and call Gemini
   const userMessage = await buildGenerationPrompt();
@@ -202,7 +203,7 @@ export async function handleGeneratePrompts(): Promise<void> {
 
     if (!Array.isArray(rawData)) throw new Error("Response is not an array");
   } catch (e) {
-    console.error("[prompts] Gemini call failed:", e);
+    log.error({ err: e }, 'prompts: gemini call failed');
     return;
   }
 
@@ -212,13 +213,11 @@ export async function handleGeneratePrompts(): Promise<void> {
     .filter((p): p is GeneratedPrompt => p !== null);
 
   if (valid.length === 0) {
-    console.error("[prompts] No valid prompts in Gemini response");
+    log.error('prompts: no valid prompts in gemini response');
     return;
   }
 
-  console.log(
-    `[prompts] ${valid.length} valid prompts from Gemini (${rawData.length - valid.length} rejected)`,
-  );
+  log.info({ count: valid.length, rejected: rawData.length - valid.length }, 'prompts: valid prompts from gemini');
 
   // 3. Save as drafts
   const inserted = await db
@@ -253,7 +252,7 @@ export async function handleGeneratePrompts(): Promise<void> {
   const adminSecret = process.env.ADMIN_SECRET ?? "";
 
   if (!adminEmail) {
-    console.warn("[prompts] ADMIN_EMAIL not set — skipping review email");
+    log.warn('prompts: ADMIN_EMAIL not set, skipping review email');
     return;
   }
 
@@ -301,7 +300,5 @@ export async function handleGeneratePrompts(): Promise<void> {
     html,
   });
 
-  console.log(
-    `[prompts] Review email sent to ${adminEmail} with ${valid.length} drafts`,
-  );
+  log.info({ count: valid.length, to: adminEmail }, 'prompts: review email sent');
 }

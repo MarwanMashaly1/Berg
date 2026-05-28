@@ -21,7 +21,7 @@ function sign(secret: string, message: string): string {
   return createHmac('sha256', secret).update(message).digest('hex');
 }
 
-export type AdminAction = 'approve' | 'reject' | 'approve-all';
+export type AdminAction = 'approve' | 'reject' | 'approve-all' | 'generate';
 
 /**
  * Create a signed token for an admin email link.

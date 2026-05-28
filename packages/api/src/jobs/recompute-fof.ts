@@ -4,6 +4,7 @@ import {
   motiveAttendees, promptResponses, userBlocks,
 } from '@berg/shared';
 import { and, eq, inArray, notInArray, ne, sql } from 'drizzle-orm';
+import { log } from '../lib/logger.js';
 
 /**
  * FOF suggestion scoring -- 5 signals, weighted sum -> 0.00-1.00
@@ -323,12 +324,12 @@ export async function handleRecomputeFofAll(): Promise<void> {
       ),
     );
 
-  console.log(`[fof] Recomputing for ${allUsers.length} users`);
+  log.info({ count: allUsers.length }, 'fof: recomputing for all users');
 
   const BATCH = 50;
   for (let i = 0; i < allUsers.length; i += BATCH) {
     const batch = allUsers.slice(i, i + BATCH);
     await Promise.allSettled(batch.map((u) => recomputeFofForUser(u.id)));
-    console.log(`[fof] Processed ${Math.min(i + BATCH, allUsers.length)} / ${allUsers.length}`);
+    log.info({ processed: Math.min(i + BATCH, allUsers.length), total: allUsers.length }, 'fof: batch processed');
   }
 }

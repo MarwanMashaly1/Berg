@@ -6,6 +6,7 @@ import { motives, motiveAttendees, motiveMemories, users } from '@berg/shared';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin, MEMORIES_BUCKET, SIGNED_URL_TTL } from '../lib/supabase-admin.js';
 import type { auth } from '../auth.js';
+import { log } from '../lib/logger.js';
 
 type Variables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -49,6 +50,8 @@ memoriesRoutes.post('/:id/memories/upload-url', async (c) => {
     return c.json({ error: 'not an attendee' }, 403);
   }
 
+  // Signed URL flow: server never receives file bytes, so magic byte check is not possible.
+  // Allowlist restricts to image types only; Supabase enforces content-type on upload.
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
   if (!allowedTypes.includes(contentType)) {
     return c.json({ error: 'unsupported content type' }, 400);
@@ -63,7 +66,7 @@ memoriesRoutes.post('/:id/memories/upload-url', async (c) => {
     .createSignedUploadUrl(path);
 
   if (error || !data) {
-    console.error('[memories] createSignedUploadUrl error:', JSON.stringify(error));
+    log.error({ err: error, motiveId, userId: me.id }, 'memories createSignedUploadUrl failed');
     return c.json({ error: `could not create upload URL: ${error?.message ?? 'unknown'}` }, 500);
   }
 
@@ -231,7 +234,7 @@ memoriesRoutes.delete('/:id/memories/:encodedPath', async (c) => {
   // Delete from storage
   const { error } = await supabaseAdmin.storage.from(MEMORIES_BUCKET).remove([path]);
   if (error) {
-    console.error('[memories] delete error:', error);
+    log.error({ err: error, motiveId, userId: me.id, path }, 'memories delete failed');
     return c.json({ error: 'delete failed' }, 500);
   }
 

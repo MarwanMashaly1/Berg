@@ -2,6 +2,8 @@
 // The .mjs bridge forces Node to load it as ESM regardless of tsx's transform,
 // so the named export PgBoss is always the real constructor.
 
+import { log } from './logger.js';
+
 type PgBossInstance = Awaited<ReturnType<typeof makeBoss>>;
 
 async function makeBoss() {
@@ -20,10 +22,10 @@ export async function getQueue(): Promise<PgBossInstance> {
   if (!boss) {
     boss = await makeBoss();
     boss.on('error', (err: unknown) => {
-      console.error('[queue] pg-boss error:', err);
+      log.error({ err }, 'queue pg-boss error');
     });
     await boss.start();
-    console.log('[queue] pg-boss started');
+    log.info('queue pg-boss started');
   }
   return boss;
 }
@@ -31,6 +33,13 @@ export async function getQueue(): Promise<PgBossInstance> {
 export async function enqueue(name: string, data: Record<string, unknown>): Promise<void> {
   const q = await getQueue();
   await q.send(name, data);
+}
+
+export async function stopQueue(): Promise<void> {
+  if (boss) {
+    await boss.stop();
+    boss = null;
+  }
 }
 
 export async function enqueueAt(

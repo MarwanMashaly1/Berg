@@ -1,3 +1,5 @@
+import type { Context } from 'hono';
+
 /**
  * In-memory sliding window rate limiter.
  *
@@ -69,6 +71,25 @@ export class RateLimiter {
 export const rateLimiter = new RateLimiter();
 
 /**
+ * Check rate limit and set Retry-After header if exceeded.
+ * Returns the 429 Response if limited, undefined if allowed.
+ *
+ * Usage: const limited = rateLimit(c, key, limit, windowMs); if (limited) return limited;
+ */
+export function rateLimit(
+  c: Context,
+  key: string,
+  limit: number,
+  windowMs: number,
+): Response | undefined {
+  const rl = rateLimiter.check(key, limit, windowMs);
+  if (!rl.allowed) {
+    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+    return c.json({ error: 'Rate limit exceeded' }, 429) as unknown as Response;
+  }
+}
+
+/**
  * Per-endpoint limits for Google Places API calls.
  * These are intentionally generous for real users but prevent scraping.
  *
@@ -94,4 +115,5 @@ export const API_LIMITS = {
   connectionRequest: { limit: 30,  windowMs: 60 * 60 * 1000 },     // 30/hr
   phoneStart:        { limit: 5,   windowMs: 60 * 60 * 1000 },     // 5 SMS/hr per phone
   verifyCode:        { limit: 10,  windowMs: 15 * 60 * 1000 },     // 10 attempts per 15 min
+  adminGenerate:     { limit: 5,   windowMs: 60 * 60 * 1000 },     // 5 Gemini batch calls/hr
 } as const;

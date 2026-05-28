@@ -6,13 +6,20 @@ import { dailyPrompts } from '@berg/shared';
 import { handleGeneratePrompts } from '../jobs/generate-prompts.js';
 import { handleSelectDailyPrompt } from '../jobs/select-daily-prompt.js';
 import { verifyEmailToken } from '../lib/admin-token.js';
+import { rateLimit, API_LIMITS } from '../lib/rate-limiter.js';
 
 export const adminRoutes = new Hono();
 
 /** Timing-safe string comparison to prevent timing attacks on the admin secret. */
 function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  // Pad to equal length before timingSafeEqual to avoid early exit on length difference.
+  // The length check after ensures we don't accept a padded match.
+  const maxLen = Math.max(a.length, b.length, 1);
+  const aBuf = Buffer.alloc(maxLen);
+  const bBuf = Buffer.alloc(maxLen);
+  aBuf.write(a);
+  bBuf.write(b);
+  return timingSafeEqual(aBuf, bBuf) && a.length === b.length;
 }
 
 /** Structured audit log for all admin state mutations. */
@@ -89,7 +96,11 @@ function confirmPage(id: string, action: 'approve' | 'reject', count?: number): 
 
 // -- GET /api/admin/prompts -- list prompts by status ---------------------------
 adminRoutes.get('/prompts', async (c) => {
-  const status = (c.req.query('status') ?? 'draft') as string;
+  const statusParam = c.req.query('status') ?? 'draft';
+  if (!(ALLOWED_PROMPT_STATUSES as readonly string[]).includes(statusParam)) {
+    return c.json({ error: `Invalid status. Must be one of: ${ALLOWED_PROMPT_STATUSES.join(', ')}` }, 400);
+  }
+  const status = statusParam as typeof ALLOWED_PROMPT_STATUSES[number];
   const rows = await db
     .select()
     .from(dailyPrompts)
@@ -104,7 +115,7 @@ adminRoutes.get('/prompts', async (c) => {
 // GET /api/admin/prompts/:id/approve
 //   With ?t=<hmac-token>  -> validates HMAC, approves immediately (email link flow)
 //   Without ?t=           -> shows confirmation page (Bearer-authed browser flow)
-adminRoutes.get('/prompts/:id/approve', async (c) => {
+adminRoutes.get('/prompts/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/approve', async (c) => {
   const { id } = c.req.param();
   const token = c.req.query('t');
 
@@ -122,7 +133,7 @@ adminRoutes.get('/prompts/:id/approve', async (c) => {
 });
 
 // POST /api/admin/prompts/:id/approve -- approves (requires Bearer)
-adminRoutes.post('/prompts/:id/approve', async (c) => {
+adminRoutes.post('/prompts/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/approve', async (c) => {
   const { id } = c.req.param();
   adminLog('prompt.approve', `id=${id} via=api`);
   await db.update(dailyPrompts).set({ status: 'approved' }).where(eq(dailyPrompts.id, id));
@@ -134,7 +145,7 @@ adminRoutes.post('/prompts/:id/approve', async (c) => {
 // GET /api/admin/prompts/:id/reject
 //   With ?t=<hmac-token>  -> validates HMAC, rejects immediately
 //   Without ?t=           -> shows confirmation page
-adminRoutes.get('/prompts/:id/reject', async (c) => {
+adminRoutes.get('/prompts/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/reject', async (c) => {
   const { id } = c.req.param();
   const token = c.req.query('t');
 
@@ -152,7 +163,7 @@ adminRoutes.get('/prompts/:id/reject', async (c) => {
 });
 
 // POST /api/admin/prompts/:id/reject -- rejects (requires Bearer)
-adminRoutes.post('/prompts/:id/reject', async (c) => {
+adminRoutes.post('/prompts/:id{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/reject', async (c) => {
   const { id } = c.req.param();
   adminLog('prompt.reject', `id=${id} via=api`);
   await db.update(dailyPrompts).set({ status: 'archived' }).where(eq(dailyPrompts.id, id));
@@ -241,7 +252,7 @@ adminRoutes.patch('/prompts/:id', async (c) => {
       ...(body.question && { question: String(body.question).slice(0, 500) }),
       ...(body.status && { status: body.status }),
       ...(body.qualityScore !== undefined && { qualityScore: body.qualityScore }),
-      ...(body.options && { options: JSON.stringify(body.options) }),
+      ...(body.options !== undefined ? { options: JSON.stringify(body.options) } : {}),
     })
     .where(eq(dailyPrompts.id, id));
 
@@ -259,6 +270,8 @@ adminRoutes.post('/prompts/select-daily', async (c) => {
 
 // POST /api/admin/prompts/generate -- trigger batch (requires Bearer)
 adminRoutes.post('/prompts/generate', async (c) => {
+  const limited = rateLimit(c, 'admin:generate', API_LIMITS.adminGenerate.limit, API_LIMITS.adminGenerate.windowMs);
+  if (limited) return limited;
   adminLog('prompt.generate', 'batch generation triggered via API');
   handleGeneratePrompts().catch((e) => console.error('[admin] generation failed:', e));
   return c.json({ ok: true, message: 'Batch generation started. Check your email in ~30 seconds.' });
@@ -277,8 +290,16 @@ adminRoutes.get('/cache/stats', async (c) => {
   });
 });
 
-// GET /api/admin/prompts/generate -- trigger from browser with Bearer
+// GET /api/admin/prompts/generate -- trigger from browser via email link (?t= HMAC token)
 adminRoutes.get('/prompts/generate', async (c) => {
+  const limited = rateLimit(c, 'admin:generate', API_LIMITS.adminGenerate.limit, API_LIMITS.adminGenerate.windowMs);
+  if (limited) return limited;
+  const t = c.req.query('t');
+  const adminSecret = process.env.ADMIN_SECRET!;
+  // Email links use ?t= HMAC token; Bearer-authenticated requests (no ?t=) pass through
+  if (t && !verifyEmailToken(adminSecret, t, 'generate', 'batch')) {
+    return c.html(expiredPage());
+  }
   adminLog('prompt.generate', 'batch generation triggered via GET');
   handleGeneratePrompts().catch((e) => console.error('[admin] generation failed:', e));
   return c.html(successPage('🧊', 'Generating prompts...', 'Gemini is generating 20 new prompts. You\'ll receive an email to review them in ~30 seconds.'));

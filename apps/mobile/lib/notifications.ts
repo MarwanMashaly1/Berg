@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
+import { Routes } from './routes';
 
 // Show alerts and play sound for all incoming notifications while app is foregrounded.
 // This is safe to call in Expo Go — it only configures foreground behaviour.
@@ -86,24 +87,25 @@ export function handleNotificationTap(notification: Notifications.Notification):
     case 'motives':
       if (data.motiveId) {
         const suffix = data.path ? `/${data.path}` : '';
-        router.push(`/(app)/(tabs)/motives/${data.motiveId}${suffix}` as any);
+        if (suffix) {
+          router.push(`/(app)/(tabs)/motives/${data.motiveId}${suffix}` as any);
+        } else {
+          router.push(Routes.motive(data.motiveId));
+        }
       }
       break;
     case 'chat':
-      if (data.chatId) router.push(`/(app)/(tabs)/chat/${data.chatId}` as any);
+      if (data.chatId) router.push(Routes.chat(data.chatId));
       break;
     case 'discovery':
-      router.push('/(app)/(tabs)/discovery' as any);
+      router.push(Routes.discovery);
       break;
     case 'connections':
-      router.push('/(app)/(tabs)/profile/connections' as any);
+      router.push(Routes.profileConnections);
       break;
     case 'circle':
       if (data.circleId) {
-        router.push({
-          pathname: '/(app)/(tabs)/profile/circle-detail',
-          params: { id: data.circleId },
-        } as any);
+        router.push(Routes.profileCircleDetail(data.circleId));
       }
       break;
     // [align-1] Motive-mappable match: deep-link to motive creation pre-filled

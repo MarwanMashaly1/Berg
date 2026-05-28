@@ -9,6 +9,7 @@ import { enqueue } from '../lib/queue.js';
 import { cache, TTL, CK } from '../lib/cache.js';
 import { posthog } from '../lib/posthog.js';
 import type { auth } from '../auth.js';
+import { log } from '../lib/logger.js';
 
 type Variables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -80,29 +81,35 @@ promptRoutes.post(
     const promptId = c.req.param('id');
     const { optionKey, optionIndex, storyText } = c.req.valid('json');
 
-    await db
-      .insert(promptResponses)
-      .values({
-        userId: me.id,
-        promptId,
-        optionKey,
-        optionIndex,
-        storyText: storyText ?? null,
-        responseText: '',
-        respondedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [promptResponses.userId, promptResponses.promptId],
-        set: {
+    try {
+      await db
+        .insert(promptResponses)
+        .values({
+          userId: me.id,
+          promptId,
           optionKey,
           optionIndex,
           storyText: storyText ?? null,
+          responseText: '',
           respondedAt: new Date(),
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: [promptResponses.userId, promptResponses.promptId],
+          set: {
+            optionKey,
+            optionIndex,
+            storyText: storyText ?? null,
+            respondedAt: new Date(),
+          },
+        });
+    } catch (err) {
+      log.error({ err, promptId, userId: me.id }, 'prompts respond failed');
+      return c.json({ error: 'Failed to save response' }, 500);
+    }
 
     // Enqueue match-check job -- runs immediately, checks thresholds
-    void enqueue('prompt/new-response', { promptId, userId: me.id, optionKey }).catch(() => {});
+    void enqueue('prompt/new-response', { promptId, userId: me.id, optionKey })
+      .catch((err) => log.error({ err, promptId, userId: me.id }, 'prompts new-response enqueue failed'));
 
     posthog.capture({
       distinctId: me.id,

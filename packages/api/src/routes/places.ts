@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { requireAuth } from '../middleware/auth.js';
-import { rateLimiter, PLACES_LIMITS } from '../lib/rate-limiter.js';
+import { rateLimit, PLACES_LIMITS } from '../lib/rate-limiter.js';
 import {
   placesCache, NEARBY_TTL_MS, AUTOCOMPLETE_TTL_MS, DETAIL_TTL_MS, roundCoord,
 } from '../lib/places-cache.js';
 import type { auth } from '../auth.js';
+import { log } from '../lib/logger.js';
 
 type Variables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -48,9 +49,15 @@ function parseCoords(lat?: string, lng?: string): { lat: number; lng: number } |
   return { lat: latN, lng: lngN };
 }
 
-// ── Shared fetch helper with API key header ───────────────────────────────────
+// ── Shared fetch helpers ──────────────────────────────────────────────────────
 
-function placesRequest(url: string, key: string, body: unknown) {
+function withTimeout(ms: number): { signal: AbortSignal; clear: () => void } {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  return { signal: ac.signal, clear: () => clearTimeout(t) };
+}
+
+function placesRequest(url: string, key: string, body: unknown, signal?: AbortSignal) {
   return fetch(url, {
     method: 'POST',
     headers: {
@@ -58,6 +65,7 @@ function placesRequest(url: string, key: string, body: unknown) {
       'X-Goog-Api-Key': key,
     },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -75,87 +83,82 @@ placesRoutes.use('*', requireAuth);
 placesRoutes.get('/nearby', async (c) => {
   const me = c.get('user')!;
 
-  const rl = rateLimiter.check(`${me.id}:places/nearby`, PLACES_LIMITS.nearby.limit, PLACES_LIMITS.nearby.windowMs);
-  if (!rl.allowed) {
-    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
-    return c.json({ places: [] });
-  }
+  const limited = rateLimit(c, `${me.id}:places/nearby`, PLACES_LIMITS.nearby.limit, PLACES_LIMITS.nearby.windowMs);
+  if (limited) return limited;
 
   const key = process.env.GOOGLE_PLACES_API_KEY;
   const category = c.req.query('category') ?? '';
   const coords = parseCoords(c.req.query('lat'), c.req.query('lng'));
 
-  console.log('[places/nearby]', { hasKey: !!key, category, coords });
+  log.debug({ hasKey: !!key, category, coords }, 'places/nearby');
 
   if (!key || !coords) return c.json({ places: [] });
 
   const type = CATEGORY_TYPE_MAP[category];
-  console.log('[places/nearby] type:', type);
+  log.debug({ category, type }, 'places/nearby resolved type');
   if (!type) return c.json({ places: [] });
 
   const cacheKey = `nearby:${category}:${roundCoord(coords.lat)}:${roundCoord(coords.lng)}`;
-  const cached = placesCache.get(cacheKey);
-  if (cached) {
-    c.header('X-Cache', 'HIT');
-    return c.json({ places: cached });
-  }
 
   try {
-    const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': key,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.shortFormattedAddress,places.location,places.rating,places.userRatingCount,places.currentOpeningHours',
-      },
-      body: JSON.stringify({
-        includedTypes: [type],
-        maxResultCount: 5,
-        rankPreference: 'POPULARITY',
-        locationRestriction: {
-          circle: {
-            center: { latitude: coords.lat, longitude: coords.lng },
-            radius: 2000.0,
-          },
+    const { data: places, hit } = await placesCache.wrap(cacheKey, NEARBY_TTL_MS, async () => {
+      const { signal, clear } = withTimeout(5000);
+      const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': key,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.shortFormattedAddress,places.location,places.rating,places.userRatingCount,places.currentOpeningHours',
         },
-      }),
+        body: JSON.stringify({
+          includedTypes: [type],
+          maxResultCount: 5,
+          rankPreference: 'POPULARITY',
+          locationRestriction: {
+            circle: {
+              center: { latitude: coords.lat, longitude: coords.lng },
+              radius: 2000.0,
+            },
+          },
+        }),
+        signal,
+      }).finally(clear);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: { message?: string; status?: string } };
+        log.error({ status: res.status, message: err?.error?.message }, 'places/nearby google API error');
+        return [];
+      }
+
+      const data = await res.json() as {
+        places?: Array<{
+          id: string;
+          displayName?: { text: string };
+          shortFormattedAddress?: string;
+          rating?: number;
+          userRatingCount?: number;
+          location: { latitude: number; longitude: number };
+          currentOpeningHours?: { openNow?: boolean };
+        }>;
+      };
+
+      return (data.places ?? []).map((p) => ({
+        placeId: p.id,
+        name: p.displayName?.text ?? '',
+        address: p.shortFormattedAddress ?? '',
+        lat: p.location.latitude,
+        lng: p.location.longitude,
+        rating: p.rating ?? null,
+        reviewCount: p.userRatingCount ?? null,
+        distanceKm: distanceKm(coords.lat, coords.lng, p.location.latitude, p.location.longitude),
+        isOpen: p.currentOpeningHours?.openNow ?? null,
+      }));
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { error?: { message?: string; status?: string } };
-      console.error('[places/nearby] Google API error:', res.status, err?.error?.message);
-      return c.json({ places: [] });
-    }
-
-    const data = await res.json() as {
-      places?: Array<{
-        id: string;
-        displayName?: { text: string };
-        shortFormattedAddress?: string;
-        rating?: number;
-        userRatingCount?: number;
-        location: { latitude: number; longitude: number };
-        currentOpeningHours?: { openNow?: boolean };
-      }>;
-    };
-
-    const places = (data.places ?? []).map((p) => ({
-      placeId: p.id,
-      name: p.displayName?.text ?? '',
-      address: p.shortFormattedAddress ?? '',
-      lat: p.location.latitude,
-      lng: p.location.longitude,
-      rating: p.rating ?? null,
-      reviewCount: p.userRatingCount ?? null,
-      distanceKm: distanceKm(coords.lat, coords.lng, p.location.latitude, p.location.longitude),
-      isOpen: p.currentOpeningHours?.openNow ?? null,
-    }));
-
-    placesCache.set(cacheKey, places, NEARBY_TTL_MS);
-    c.header('X-Cache', 'MISS');
+    c.header('X-Cache', hit ? 'HIT' : 'MISS');
     return c.json({ places });
   } catch (e) {
-    console.error('[places/nearby] fetch failed:', e);
+    log.error({ err: e }, 'places/nearby fetch failed');
     return c.json({ places: [] });
   }
 });
@@ -170,91 +173,86 @@ placesRoutes.get('/nearby', async (c) => {
 placesRoutes.get('/autocomplete', async (c) => {
   const me = c.get('user')!;
 
-  const rl = rateLimiter.check(`${me.id}:places/search`, PLACES_LIMITS.search.limit, PLACES_LIMITS.search.windowMs);
-  if (!rl.allowed) {
-    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
-    return c.json({ places: [] });
-  }
+  const limited = rateLimit(c, `${me.id}:places/search`, PLACES_LIMITS.search.limit, PLACES_LIMITS.search.windowMs);
+  if (limited) return limited;
 
   const key = process.env.GOOGLE_PLACES_API_KEY;
   const q = (c.req.query('q') ?? '').trim();
   const coords = parseCoords(c.req.query('lat'), c.req.query('lng'));
   const sessionToken = c.req.query('sessionToken') ?? '';
 
-  console.log('[places/autocomplete]', { hasKey: !!key, q, coords });
+  log.debug({ hasKey: !!key, q, coords }, 'places/autocomplete');
 
   if (!key || q.length < 2) return c.json({ places: [] });
 
   const latKey = coords ? roundCoord(coords.lat) : 'x';
   const lngKey = coords ? roundCoord(coords.lng) : 'x';
   const cacheKey = `autocomplete:${q.toLowerCase()}:${latKey}:${lngKey}`;
-  const cached = placesCache.get(cacheKey);
-  if (cached) {
-    c.header('X-Cache', 'HIT');
-    return c.json({ places: cached });
-  }
 
   try {
-    const body: Record<string, unknown> = {
-      input: q,
-      includedPrimaryTypes: ['establishment'],
-    };
-    if (sessionToken) body.sessionToken = sessionToken;
-    if (coords) {
-      body.locationBias = {
-        circle: {
-          center: { latitude: coords.lat, longitude: coords.lng },
-          radius: 50000.0,
-        },
+    const { data: places, hit } = await placesCache.wrap(cacheKey, AUTOCOMPLETE_TTL_MS, async () => {
+      const body: Record<string, unknown> = {
+        input: q,
+        includedPrimaryTypes: ['establishment'],
       };
-    }
-
-    const res = await placesRequest(
-      'https://places.googleapis.com/v1/places:autocomplete',
-      key,
-      body,
-    );
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-      console.error('[places/autocomplete] Google API error:', res.status, err?.error?.message);
-      return c.json({ places: [] });
-    }
-
-    const data = await res.json() as {
-      suggestions?: Array<{
-        placePrediction?: {
-          placeId: string;
-          structuredFormat?: {
-            mainText?: { text: string };
-            secondaryText?: { text: string };
-          };
-          text?: { text: string };
-          distanceMeters?: number;
+      if (sessionToken) body.sessionToken = sessionToken;
+      if (coords) {
+        body.locationBias = {
+          circle: {
+            center: { latitude: coords.lat, longitude: coords.lng },
+            radius: 50000.0,
+          },
         };
-      }>;
-    };
+      }
 
-    const places = (data.suggestions ?? [])
-      .map((s) => s.placePrediction)
-      .filter((p): p is NonNullable<typeof p> => !!p)
-      .slice(0, 5)
-      .map((p) => ({
-        placeId: p.placeId,
-        name: p.structuredFormat?.mainText?.text ?? p.text?.text ?? '',
-        address: p.structuredFormat?.secondaryText?.text ?? '',
-        lat: null,
-        lng: null,
-        rating: null,
-        distanceKm: p.distanceMeters != null ? Math.round(p.distanceMeters / 100) / 10 : null,
-        isOpen: null,
-      }));
+      const { signal, clear } = withTimeout(5000);
+      const res = await placesRequest(
+        'https://places.googleapis.com/v1/places:autocomplete',
+        key,
+        body,
+        signal,
+      ).finally(clear);
 
-    placesCache.set(cacheKey, places, AUTOCOMPLETE_TTL_MS);
-    c.header('X-Cache', 'MISS');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+        log.error({ status: res.status, message: err?.error?.message }, 'places/autocomplete google API error');
+        return [];
+      }
+
+      const data = await res.json() as {
+        suggestions?: Array<{
+          placePrediction?: {
+            placeId: string;
+            structuredFormat?: {
+              mainText?: { text: string };
+              secondaryText?: { text: string };
+            };
+            text?: { text: string };
+            distanceMeters?: number;
+          };
+        }>;
+      };
+
+      return (data.suggestions ?? [])
+        .map((s) => s.placePrediction)
+        .filter((p): p is NonNullable<typeof p> => !!p)
+        .slice(0, 5)
+        .map((p) => ({
+          placeId: p.placeId,
+          name: p.structuredFormat?.mainText?.text ?? p.text?.text ?? '',
+          address: p.structuredFormat?.secondaryText?.text ?? '',
+          lat: null,
+          lng: null,
+          rating: null,
+          distanceKm: p.distanceMeters != null ? Math.round(p.distanceMeters / 100) / 10 : null,
+          isOpen: null,
+        }));
+    });
+
+    c.header('X-Cache', hit ? 'HIT' : 'MISS');
     return c.json({ places });
   } catch (e) {
-    console.error('[places/autocomplete] fetch failed:', e);
+    log.error({ err: e }, 'places/autocomplete fetch failed');
     return c.json({ places: [] });
   }
 });
@@ -268,11 +266,8 @@ placesRoutes.get('/autocomplete', async (c) => {
 placesRoutes.get('/detail', async (c) => {
   const me = c.get('user')!;
 
-  const rl = rateLimiter.check(`${me.id}:places/detail`, PLACES_LIMITS.detail.limit, PLACES_LIMITS.detail.windowMs);
-  if (!rl.allowed) {
-    c.header('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
-    return c.json({ error: 'Too many requests' }, 429);
-  }
+  const limited = rateLimit(c, `${me.id}:places/detail`, PLACES_LIMITS.detail.limit, PLACES_LIMITS.detail.windowMs);
+  if (limited) return limited;
 
   const key = process.env.GOOGLE_PLACES_API_KEY;
   const placeId = c.req.query('placeId') ?? '';
@@ -281,51 +276,53 @@ placesRoutes.get('/detail', async (c) => {
   if (!key || !placeId) return c.json({ error: 'Missing placeId' }, 400);
 
   const cacheKey = `detail:${placeId}`;
-  const cached = placesCache.get(cacheKey);
-  if (cached) {
-    c.header('X-Cache', 'HIT');
-    return c.json(cached);
-  }
 
   try {
-    const url = new URL(`https://places.googleapis.com/v1/places/${placeId}`);
-    if (sessionToken) url.searchParams.set('sessionToken', sessionToken);
+    const { data: detail, hit } = await placesCache.wrap(cacheKey, DETAIL_TTL_MS, async () => {
+      const url = new URL(`https://places.googleapis.com/v1/places/${placeId}`);
+      if (sessionToken) url.searchParams.set('sessionToken', sessionToken);
 
-    const res = await fetch(url.toString(), {
-      headers: {
-        'X-Goog-Api-Key': key,
-        'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,rating',
-      },
+      const { signal, clear } = withTimeout(5000);
+      const res = await fetch(url.toString(), {
+        headers: {
+          'X-Goog-Api-Key': key,
+          'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,rating',
+        },
+        signal,
+      }).finally(clear);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+        log.error({ status: res.status, message: err?.error?.message, placeId }, 'places/detail google API error');
+        const e = new Error('PLACE_NOT_FOUND');
+        throw e;
+      }
+
+      const data = await res.json() as {
+        id: string;
+        displayName?: { text: string };
+        formattedAddress?: string;
+        location: { latitude: number; longitude: number };
+        rating?: number;
+      };
+
+      return {
+        placeId: data.id,
+        name: data.displayName?.text ?? '',
+        address: data.formattedAddress ?? '',
+        lat: data.location.latitude,
+        lng: data.location.longitude,
+        rating: data.rating ?? null,
+      };
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-      console.error('[places/detail] Google API error:', res.status, err?.error?.message);
-      return c.json({ error: 'Place not found' }, 404);
-    }
-
-    const data = await res.json() as {
-      id: string;
-      displayName?: { text: string };
-      formattedAddress?: string;
-      location: { latitude: number; longitude: number };
-      rating?: number;
-    };
-
-    const detail = {
-      placeId: data.id,
-      name: data.displayName?.text ?? '',
-      address: data.formattedAddress ?? '',
-      lat: data.location.latitude,
-      lng: data.location.longitude,
-      rating: data.rating ?? null,
-    };
-
-    placesCache.set(cacheKey, detail, DETAIL_TTL_MS);
-    c.header('X-Cache', 'MISS');
+    c.header('X-Cache', hit ? 'HIT' : 'MISS');
     return c.json(detail);
   } catch (e) {
-    console.error('[places/detail] fetch failed:', e);
+    if (e instanceof Error && e.message === 'PLACE_NOT_FOUND') {
+      return c.json({ error: 'Place not found' }, 404);
+    }
+    log.error({ err: e, placeId }, 'places/detail fetch failed');
     return c.json({ error: 'Failed to fetch place details' }, 500);
   }
 });
