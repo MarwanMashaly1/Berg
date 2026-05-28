@@ -91,9 +91,7 @@ const config = {
       '@sentry/react-native/expo',
       {
         url: 'https://sentry.io',
-        // authToken omitted intentionally — skips sentry-cli source map upload,
-        // avoids pnpm monorepo resolution failure on EAS. Native crash handling
-        // still wired up. Add authToken to EAS secrets to enable source maps.
+        ...(process.env.SENTRY_AUTH_TOKEN && { authToken: process.env.SENTRY_AUTH_TOKEN }),
       },
     ],
   ],

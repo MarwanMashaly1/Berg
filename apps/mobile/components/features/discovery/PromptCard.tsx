@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { C, Fonts } from '../../../constants/theme';
 import { PromptOption, TodayPromptResponse, respondToPrompt } from '../../../lib/api';
+import { trackPromptAnswered } from '../../../lib/analytics';
 
 type Props = {
   prompt: TodayPromptResponse['prompt'];
@@ -143,6 +144,7 @@ export function PromptCard({ prompt, userResponse, onReveal, onAnswered }: Props
         optionIndex: selectedIndex,
         storyText: storyText || undefined,
       });
+      trackPromptAnswered({ promptId: prompt.id, optionKey: selectedKey, has_story: !!storyText });
       cardScale.value = withSpring(1.0, { damping: 10 });
       onAnswered?.(selectedKey, selectedIndex, storyText || undefined);
       onReveal();

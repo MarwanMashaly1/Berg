@@ -19,15 +19,14 @@ export function initSentry() {
       environment: __DEV__ ? 'development' : 'production',
       tracesSampleRate: 0.1,
       // Disable automatic session tracking to reduce noise
-      autoSessionTracking: true,
+      enableAutoSessionTracking: true,
       // Disable native crash reporting if native module not available
       enableNative: true,
       enableNativeCrashHandling: true,
     });
     initialized = true;
-  } catch {
-    // Native module not available (simulator, bare Expo without plugin, etc.)
-    // PostHog already captures errors as fallback — safe to continue without Sentry
+  } catch (error) {
+    console.warn('[sentry] init failed:', error);
   }
 }
 

@@ -9,6 +9,7 @@ import { Input } from '../../../components/ui/Input';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { patchUser } from '../../../lib/api';
 import { log } from '../../../lib/logger';
+import { trackOnboardingStep } from '../../../lib/analytics';
 
 const PROMPTS = ['Your most niche interest?', "A skill you're quietly proud of?", 'Something you\'re always up to talk about?'];
 
@@ -29,6 +30,7 @@ export default function Step3() {
     try {
       const bio = skip ? undefined : answers.filter(Boolean).join(' · ') || undefined;
       await patchUser({ ...(bio ? { bio } : {}), onboardingStep: '3' });
+      trackOnboardingStep(3);
       router.push('/(app)/onboarding/step-4');
     } catch (err) { log.error('onboarding step-3 save failed', err); Alert.alert('Something went wrong', 'Please try again.'); setSaving(false); }
   }

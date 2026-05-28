@@ -9,8 +9,13 @@ import { initSentry, Sentry } from '../lib/sentry';
 // Initialize before anything else — defensive, never throws
 initSentry();
 
-// Suppress all dev overlays — Sentry captures everything
-LogBox.ignoreAllLogs();
+// Suppress known noisy-but-harmless warnings; leave real warnings visible
+LogBox.ignoreLogs([
+  'Non-serializable values were found in the navigation state',
+  'VirtualizedLists should never be nested',
+  'Warning: Each child in a list should have a unique "key" prop',
+  'Require cycle:',
+]);
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

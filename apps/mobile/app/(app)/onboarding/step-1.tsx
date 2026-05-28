@@ -13,6 +13,7 @@ import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { BergSheet } from '../../../components/ui/BergSheet';
 import { CircularCropModal } from '../../../components/ui/CircularCropModal';
 import { patchUser, checkUsername } from '../../../lib/api';
+import { trackOnboardingStep } from '../../../lib/analytics';
 import {
   pickImageFromLibrary, takePhotoFromCamera,
   uploadAvatarFromUri, PickedImage,
@@ -93,6 +94,7 @@ export default function Step1() {
         if (!available) { setUsernameError('That handle is already taken'); setLoading(false); return; }
       }
       await patchUser({ name: trimmed, displayName: trimmed, ...(handle ? { username: handle } : {}), onboardingStep: '1' });
+      trackOnboardingStep(1);
       router.push('/(app)/onboarding/step-2');
     } catch {
       setError('Something went wrong. Try again.');

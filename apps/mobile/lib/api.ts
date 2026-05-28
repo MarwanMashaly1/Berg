@@ -3,6 +3,7 @@ import { authClient } from './auth';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { Config } from './config';
+import { captureError } from './analytics';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,7 +80,9 @@ export async function apiFetch<T>(
     } catch {
       message = body || response.statusText || `API error ${response.status}`;
     }
-    throw new Error(message);
+    const err = new Error(message);
+    captureError(err, { path, status: response.status });
+    throw err;
   }
 
   return response.json() as Promise<T>;

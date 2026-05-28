@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { BackButton } from '../../../components/ui/BackButton';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { getVibeTags, getUserVibeTags, postUserVibeTags, patchUser } from '../../../lib/api';
+import { trackOnboardingStep } from '../../../lib/analytics';
 
 type VibeTag = { id: string; label: string; emoji: string; category: string };
 
@@ -57,6 +58,7 @@ export default function Step2() {
         router.back();
       } else {
         await patchUser({ onboardingStep: '2' });
+        trackOnboardingStep(2);
         router.push('/(app)/onboarding/step-3');
       }
     } catch {

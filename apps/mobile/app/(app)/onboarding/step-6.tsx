@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
 import { patchUser } from '../../../lib/api';
+import { trackOnboardingStep, trackOnboardingCompleted } from '../../../lib/analytics';
 
 export default function Step6() {
   const [saving, setSaving] = useState(false);
@@ -14,6 +15,8 @@ export default function Step6() {
     setSaving(true);
     try {
       await patchUser({ onboardingCompleted: true, onboardingStep: '6' });
+      trackOnboardingStep(6);
+      trackOnboardingCompleted();
       router.replace('/(app)/(tabs)/discovery');
     } catch { setSaving(false); }
   }

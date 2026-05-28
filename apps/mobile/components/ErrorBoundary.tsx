@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { C, Fonts } from '../constants/theme';
 import { captureError } from '../lib/analytics';
+import { queryClient } from '../lib/api';
 
 interface State { hasError: boolean; errorMessage?: string }
 
@@ -37,7 +38,7 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Stat
         <TouchableOpacity
           style={styles.btn}
           activeOpacity={0.8}
-          onPress={() => this.setState({ hasError: false })}
+          onPress={() => { queryClient.clear(); this.setState({ hasError: false }); }}
         >
           <Text style={styles.btnText}>Try again</Text>
         </TouchableOpacity>

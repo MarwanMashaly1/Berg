@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { patchUser, getInviteLink } from '../../../lib/api';
 import { log } from '../../../lib/logger';
+import { trackOnboardingStep } from '../../../lib/analytics';
 import { useAsyncData } from '../../../lib/hooks/useAsyncData';
 
 export default function Step5() {
@@ -29,7 +30,7 @@ export default function Step5() {
 
   async function advance() {
     setSaving(true);
-    try { await patchUser({ onboardingStep: '5' }); router.push('/(app)/onboarding/step-6'); }
+    try { await patchUser({ onboardingStep: '5' }); trackOnboardingStep(5); router.push('/(app)/onboarding/step-6'); }
     catch { setSaving(false); }
   }
 

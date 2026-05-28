@@ -11,6 +11,7 @@ import { Input } from '../../../components/ui/Input';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { apiFetch, patchUser } from '../../../lib/api';
 import { log } from '../../../lib/logger';
+import { trackOnboardingStep } from '../../../lib/analytics';
 
 export default function Step4() {
   const [phone, setPhone] = useState('');
@@ -29,6 +30,7 @@ export default function Step4() {
       const { sessionId } = await apiFetch<{ sessionId: string }>('/api/phone/start', { method: 'POST', body: JSON.stringify({ phoneNumber: fullPhone }) });
       await apiFetch('/api/phone/link', { method: 'POST', body: JSON.stringify({ sessionId }) });
       await patchUser({ onboardingStep: '4' });
+      trackOnboardingStep(4);
       // Request contacts permission now that user has a phone number — best time to ask
       if (Contacts) await Contacts.requestPermissionsAsync().catch(() => {});
       router.push('/(app)/onboarding/step-5');
@@ -41,7 +43,7 @@ export default function Step4() {
 
   async function skip() {
     setSaving(true);
-    try { await patchUser({ onboardingStep: '4' }); router.push('/(app)/onboarding/step-5'); }
+    try { await patchUser({ onboardingStep: '4' }); trackOnboardingStep(4); router.push('/(app)/onboarding/step-5'); }
     catch (err) { log.error('onboarding step-4 skip failed', err); Alert.alert('Something went wrong', 'Please try again.'); setSaving(false); }
   }
 
