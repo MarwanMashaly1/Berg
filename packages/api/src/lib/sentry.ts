@@ -12,7 +12,7 @@ export function initSentry() {
     dsn,
     environment: process.env.NODE_ENV ?? 'production',
     // 10% perf sampling in prod — full for errors regardless
-    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.5 : 1.0,
     integrations: [Sentry.httpIntegration()],
   });
   initialized = true;

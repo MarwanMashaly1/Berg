@@ -141,12 +141,12 @@ export async function debouncedChatPush(
     existing.payload = payload;
   }
 
+  // Write inbox row immediately — survives server restart; push is best-effort
+  await recordInbox(userIds, payload);
+
   const entry: PendingPush = existing ?? { timer: null as any, userIds, payload };
   entry.timer = setTimeout(async () => {
     pendingPushes.delete(chatId);
-
-    // Write inbox rows once per burst, not once per message
-    await recordInbox(entry.userIds, entry.payload);
 
     const tokens = await getTokens(entry.userIds);
     if (tokens.length === 0) return;

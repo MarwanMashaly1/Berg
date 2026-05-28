@@ -1,4 +1,6 @@
 ﻿import { Hono } from 'hono';
+import { z } from 'zod';
+import { zValidator } from '@hono/zod-validator';
 import { eq, and, sql, inArray, desc } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../db.js';
@@ -17,11 +19,40 @@ import { rateLimiter, rateLimit, API_LIMITS } from '../lib/rate-limiter.js';
 import { cache, TTL, CK } from '../lib/cache.js';
 import type { auth } from '../auth.js';
 import { log } from '../lib/logger.js';
+import { reportAndReturn500 } from '../lib/errors.js';
 
 type Variables = {
   user: typeof auth.$Infer.Session.user | null;
   session: typeof auth.$Infer.Session.session | null;
 };
+
+const createGroupSchema = z.object({
+  name: z.string().min(1).max(100),
+  memberIds: z.array(z.string()).default([]),
+});
+
+const createDirectSchema = z.object({
+  userId: z.string().min(1),
+});
+
+const sendMessageSchema = z.object({
+  content: z.string().min(1).max(4000),
+  type: z.enum(['text', 'image', 'gif']).default('text'),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+const renameGroupSchema = z.object({
+  name: z.string().min(1).max(100),
+});
+
+const uploadUrlSchema = z.object({
+  contentType: z.string().default('image/jpeg'),
+  ext: z.string().default('jpg'),
+});
+
+const addMembersSchema = z.object({
+  userIds: z.array(z.string()).default([]),
+});
 
 export const chatsRoutes = new Hono<{ Variables: Variables }>();
 chatsRoutes.use('*', requireAuth);
@@ -152,19 +183,16 @@ chatsRoutes.get('/', async (c) => {
   c.header('X-Cache', 'MISS');
   return c.json(result);
   } catch (err) {
-    log.error({ err, userId: me.id }, 'GET /chats failed');
-    return c.json({ error: 'Failed to load chats' }, 500);
+    return reportAndReturn500(c, err, { userId: me.id });
   }
 });
 
 // -- POST /api/chats/groups -- create a personal group chat --------------------
 // [align-4] Route retained for existing chats. New group creation hidden from UI per PRODUCT_NORTH_STAR.md.
 // MUST be registered before /:id routes
-chatsRoutes.post('/groups', async (c) => {
+chatsRoutes.post('/groups', zValidator('json', createGroupSchema), async (c) => {
   const me = c.get('user')!;
-  const { name, memberIds = [] } = await c.req.json<{ name: string; memberIds: string[] }>();
-
-  if (!name?.trim()) return c.json({ error: 'name is required' }, 400);
+  const { name, memberIds } = c.req.valid('json');
 
   const allIds = Array.from(new Set([me.id, ...memberIds]));
 
@@ -183,11 +211,11 @@ chatsRoutes.post('/groups', async (c) => {
 
 // -- POST /api/chats/direct -- get or create a 1-on-1 DM ----------------------
 // MUST be registered before /:id routes
-chatsRoutes.post('/direct', async (c) => {
+chatsRoutes.post('/direct', zValidator('json', createDirectSchema), async (c) => {
   const me = c.get('user')!;
-  const { userId } = await c.req.json<{ userId: string }>();
+  const { userId } = c.req.valid('json');
 
-  if (!userId || userId === me.id) return c.json({ error: 'invalid userId' }, 400);
+  if (userId === me.id) return c.json({ error: 'invalid userId' }, 400);
 
   // Verify the two users are connected
   const [conn] = await db
@@ -310,7 +338,7 @@ chatsRoutes.get('/:id/messages', async (c) => {
 });
 
 // -- POST /api/chats/:id/messages -- send a message ----------------------------
-chatsRoutes.post('/:id/messages', async (c) => {
+chatsRoutes.post('/:id/messages', zValidator('json', sendMessageSchema), async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
 
@@ -318,20 +346,8 @@ chatsRoutes.post('/:id/messages', async (c) => {
   const limited = rateLimit(c, `${me.id}:chat-message`, API_LIMITS.chatMessage.limit, API_LIMITS.chatMessage.windowMs);
   if (limited) return limited;
 
-  const { content, type = 'text', metadata } = await c.req.json<{
-    content: string;
-    type?: string;
-    metadata?: Record<string, unknown>;
-  }>();
+  const { content, type, metadata } = c.req.valid('json');
 
-  const allowedTypes = ['text', 'image', 'gif'];
-  if (!allowedTypes.includes(type)) return c.json({ error: 'invalid message type' }, 400);
-  if (!content || typeof content !== 'string' || content.length === 0) {
-    return c.json({ error: 'content is required' }, 400);
-  }
-  if (content.length > 4000) {
-    return c.json({ error: 'Message too long (max 4000 characters)' }, 400);
-  }
   // images/gifs: content is a URL so don't trim; text: must be non-empty after trim
   if (type === 'text' && !content.trim()) return c.json({ error: 'content is required' }, 400);
 
@@ -382,12 +398,10 @@ chatsRoutes.post('/:id/messages', async (c) => {
 });
 
 // -- PATCH /api/chats/:id -- rename a group chat -------------------------------
-chatsRoutes.patch('/:id', async (c) => {
+chatsRoutes.patch('/:id', zValidator('json', renameGroupSchema), async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
-  const { name } = await c.req.json<{ name: string }>();
-
-  if (!name?.trim()) return c.json({ error: 'name is required' }, 400);
+  const { name } = c.req.valid('json');
 
   if (!(await assertMember(chatId, me.id))) {
     return c.json({ error: 'not a member' }, 403);
@@ -401,13 +415,10 @@ chatsRoutes.patch('/:id', async (c) => {
 });
 
 // -- POST /api/chats/:id/upload-url -- signed URL for a chat image -------------
-chatsRoutes.post('/:id/upload-url', async (c) => {
+chatsRoutes.post('/:id/upload-url', zValidator('json', uploadUrlSchema), async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
-  const { contentType = 'image/jpeg', ext = 'jpg' } = await c.req.json<{
-    contentType?: string;
-    ext?: string;
-  }>();
+  const { contentType, ext } = c.req.valid('json');
 
   if (!(await assertMember(chatId, me.id))) {
     return c.json({ error: 'not a member' }, 403);
@@ -438,10 +449,10 @@ chatsRoutes.post('/:id/upload-url', async (c) => {
 });
 
 // -- POST /api/chats/:id/members -- add members to a group chat ----------------
-chatsRoutes.post('/:id/members', async (c) => {
+chatsRoutes.post('/:id/members', zValidator('json', addMembersSchema), async (c) => {
   const me = c.get('user')!;
   const chatId = c.req.param('id');
-  const { userIds = [] } = await c.req.json<{ userIds: string[] }>();
+  const { userIds } = c.req.valid('json');
 
   if (!(await assertMember(chatId, me.id))) {
     return c.json({ error: 'not a member' }, 403);

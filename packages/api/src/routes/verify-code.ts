@@ -35,7 +35,7 @@ verifyCodeRoutes.post('/', zValidator('json', schema), async (c) => {
   // Resolve the full magic link token
   let token: string | null = directToken ?? null;
   if (!token && code) {
-    token = lookupCode(code.toUpperCase());
+    token = await lookupCode(code.toUpperCase());
   }
   if (!token) {
     return c.json({ error: 'Invalid or expired code' }, 400);

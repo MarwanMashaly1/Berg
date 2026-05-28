@@ -1,4 +1,6 @@
 ﻿import { Hono } from 'hono';
+import { z } from 'zod';
+import { zValidator } from '@hono/zod-validator';
 import { eq, and } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from '../db.js';
@@ -12,6 +14,21 @@ type Variables = {
   user: typeof auth.$Infer.Session.user | null;
   session: typeof auth.$Infer.Session.session | null;
 };
+
+const uploadUrlSchema = z.object({
+  contentType: z.string().default('image/jpeg'),
+  ext: z.string().default('jpg'),
+});
+
+const confirmSchema = z.object({
+  path: z.string().min(1).max(500),
+});
+
+const patchMemorySchema = z.object({
+  vibeTags: z.array(z.string().max(50)).optional(),
+  rating: z.number().int().min(1).max(5).optional(),
+  venueRating: z.number().int().min(1).max(5).optional(),
+});
 
 export const memoriesRoutes = new Hono<{ Variables: Variables }>();
 memoriesRoutes.use('*', requireAuth);
@@ -38,13 +55,10 @@ async function signPaths(paths: string[]): Promise<string[]> {
 
 // -- POST /api/motives/:id/memories/upload-url ---------------------------------
 // Returns a signed upload URL. Mobile uploads directly to Supabase Storage.
-memoriesRoutes.post('/:id/memories/upload-url', async (c) => {
+memoriesRoutes.post('/:id/memories/upload-url', zValidator('json', uploadUrlSchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
-  const { contentType = 'image/jpeg', ext = 'jpg' } = await c.req.json<{
-    contentType?: string;
-    ext?: string;
-  }>();
+  const { contentType, ext } = c.req.valid('json');
 
   if (!(await assertAttendee(motiveId, me.id))) {
     return c.json({ error: 'not an attendee' }, 403);
@@ -75,18 +89,13 @@ memoriesRoutes.post('/:id/memories/upload-url', async (c) => {
 
 // -- POST /api/motives/:id/memories/confirm ------------------------------------
 // Called after a successful upload. Saves the storage path to the DB.
-memoriesRoutes.post('/:id/memories/confirm', async (c) => {
+memoriesRoutes.post('/:id/memories/confirm', zValidator('json', confirmSchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
-  const { path } = await c.req.json<{ path: string }>();
+  const { path } = c.req.valid('json');
 
-  if (!path) return c.json({ error: 'path is required' }, 400);
-
-  // Reject path traversal sequences and excessive length
+  // Reject path traversal sequences
   if (path.includes('..') || path.includes('//')) {
-    return c.json({ error: 'Invalid path' }, 400);
-  }
-  if (path.length > 500) {
     return c.json({ error: 'Invalid path' }, 400);
   }
 
@@ -257,14 +266,10 @@ memoriesRoutes.delete('/:id/memories/:encodedPath', async (c) => {
 });
 
 // -- PATCH /api/motives/:id/memories -- save vibe tags + ratings ---------------
-memoriesRoutes.patch('/:id/memories', async (c) => {
+memoriesRoutes.patch('/:id/memories', zValidator('json', patchMemorySchema), async (c) => {
   const me = c.get('user')!;
   const motiveId = c.req.param('id');
-  const { vibeTags, rating, venueRating } = await c.req.json<{
-    vibeTags?: string[];
-    rating?: number;
-    venueRating?: number;
-  }>();
+  const { vibeTags, rating, venueRating } = c.req.valid('json');
 
   if (!(await assertAttendee(motiveId, me.id))) {
     return c.json({ error: 'not an attendee' }, 403);

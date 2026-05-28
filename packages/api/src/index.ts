@@ -76,6 +76,14 @@ app.use('*', async (c, next) => {
   }
 });
 
+// --- Global request timeout (30s) — prevents indefinite hangs on Gemini/Places calls ---
+app.use('/api/*', async (c, next) => {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Request timed out after 30s')), 30_000)
+  );
+  await Promise.race([next(), timeout]);
+});
+
 // --- CORS --------------------------------------------------------------------
 app.use(
   '/api/*',

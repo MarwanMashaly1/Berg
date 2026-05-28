@@ -22,6 +22,7 @@ import { cache, TTL, CK } from '../lib/cache.js';
 import { posthog } from '../lib/posthog.js';
 import type { auth } from '../auth.js';
 import { log } from '../lib/logger.js';
+import { reportAndReturn500 } from '../lib/errors.js';
 
 const createMotiveSchema = z.object({
   title: z.string().min(1).max(120),
@@ -242,8 +243,7 @@ motivesRoutes.post('/', zValidator('json', createMotiveSchema), async (c) => {
 
   return c.json({ id: motive.id }, 201);
   } catch (err) {
-    log.error({ err, userId: me.id }, 'POST /motives failed');
-    return c.json({ error: 'Failed to create motive' }, 500);
+    return reportAndReturn500(c, err, { userId: me.id });
   }
 });
 

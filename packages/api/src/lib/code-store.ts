@@ -1,23 +1,36 @@
-/**
- * In-memory short code → full token mapping for magic link verification.
- * Short codes expire after 15 minutes matching the magic link TTL.
- */
-const store = new Map<string, { token: string; expiresAt: number }>();
+import { db } from '../db.js';
+import { verifications } from '@berg/shared';
+import { eq } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 
-export function storeCode(shortCode: string, token: string) {
-  store.set(shortCode, {
-    token,
-    expiresAt: Date.now() + 15 * 60 * 1000,
+const CODE_TTL_MS = 15 * 60 * 1000;
+
+export async function storeCode(shortCode: string, token: string): Promise<void> {
+  const key = `magic-code:${shortCode.toUpperCase()}`;
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
+  // Remove any stale entry for this code before inserting
+  await db.delete(verifications).where(eq(verifications.identifier, key));
+  await db.insert(verifications).values({
+    id: randomUUID(),
+    identifier: key,
+    value: token,
+    expiresAt,
   });
 }
 
-export function lookupCode(shortCode: string): string | null {
-  const entry = store.get(shortCode.toUpperCase());
+export async function lookupCode(shortCode: string): Promise<string | null> {
+  const key = `magic-code:${shortCode.toUpperCase()}`;
+  const [entry] = await db
+    .select({ id: verifications.id, value: verifications.value, expiresAt: verifications.expiresAt })
+    .from(verifications)
+    .where(eq(verifications.identifier, key))
+    .limit(1);
+
   if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    store.delete(shortCode);
-    return null;
-  }
-  store.delete(shortCode); // single-use
-  return entry.token;
+
+  // Always delete — single-use whether valid or expired
+  await db.delete(verifications).where(eq(verifications.id, entry.id));
+
+  if (entry.expiresAt < new Date()) return null;
+  return entry.value;
 }

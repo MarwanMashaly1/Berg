@@ -125,7 +125,7 @@ export const auth = betterAuth({
           if (urlToken) {
             shortCode = urlToken.slice(0, 8).toUpperCase();
             const { storeCode } = await import("./lib/code-store.js");
-            storeCode(shortCode, urlToken);
+            await storeCode(shortCode, urlToken);
           }
 
           console.log(`[Magic Link] Sending to ${email.slice(0, 3)}***`);

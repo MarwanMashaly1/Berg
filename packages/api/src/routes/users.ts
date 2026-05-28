@@ -494,7 +494,8 @@ userRoutes.get("/me/export", async (c) => {
         createdAt: circles.createdAt,
       })
       .from(circles)
-      .where(eq(circles.userId, me.id)),
+      .where(eq(circles.userId, me.id))
+      .limit(5000),
 
     db
       .select({
@@ -508,7 +509,8 @@ userRoutes.get("/me/export", async (c) => {
         createdAt: motives.createdAt,
       })
       .from(motives)
-      .where(eq(motives.creatorId, me.id)),
+      .where(eq(motives.creatorId, me.id))
+      .limit(1000),
 
     db
       .select({
@@ -518,7 +520,8 @@ userRoutes.get("/me/export", async (c) => {
         respondedAt: promptResponses.respondedAt,
       })
       .from(promptResponses)
-      .where(eq(promptResponses.userId, me.id)),
+      .where(eq(promptResponses.userId, me.id))
+      .limit(5000),
 
     db
       .select({
@@ -528,7 +531,8 @@ userRoutes.get("/me/export", async (c) => {
         createdAt: motiveMemories.createdAt,
       })
       .from(motiveMemories)
-      .where(eq(motiveMemories.userId, me.id)),
+      .where(eq(motiveMemories.userId, me.id))
+      .limit(1000),
 
     db
       .select({
@@ -538,7 +542,7 @@ userRoutes.get("/me/export", async (c) => {
       })
       .from(messages)
       .where(eq(messages.senderId, me.id))
-      .limit(10000),
+      .limit(5000),
   ]);
 
   c.header("Content-Type", "application/json");

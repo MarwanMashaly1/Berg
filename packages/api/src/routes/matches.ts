@@ -77,7 +77,7 @@ matchesRoutes.get('/', async (c) => {
 
   const friendRows = uniqueFriendIds.length > 0
     ? await db
-        .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+        .select({ id: users.id, name: users.name, avatarUrl: users.image })
         .from(users)
         .where(inArray(users.id, uniqueFriendIds))
     : [];
