@@ -7,6 +7,7 @@ import { handleRecomputeFofUser, handleRecomputeFofAll } from './recompute-fof.j
 import { handleGeneratePrompts } from './generate-prompts.js';
 import { handleSelectDailyPrompt } from './select-daily-prompt.js';
 import { handleMotiveAutoArchive } from './motive-auto-archive.js';
+import { handleCleanupNotifications } from './cleanup-notifications.js';
 import { log } from '../lib/logger.js';
 
 /**
@@ -27,6 +28,7 @@ export async function startWorkers(): Promise<void> {
     'prompts/generate-batch',
     'prompts/select-daily',
     'motive/auto-archive',
+    'notifications/cleanup',
   ];
   await Promise.all(queues.map((q) => boss.createQueue(q)));
 
@@ -110,6 +112,14 @@ export async function startWorkers(): Promise<void> {
     'prompts/select-daily',
     { teamSize: 1 },
     async () => { await handleSelectDailyPrompt(); },
+  );
+
+  // Daily at 3am UTC: purge notification_inbox rows older than 30 days
+  await boss.schedule('notifications/cleanup', '0 3 * * *', {});
+  await boss.work(
+    'notifications/cleanup',
+    { teamSize: 1 },
+    async () => { await handleCleanupNotifications(); },
   );
 
   log.info('workers: all workers registered');

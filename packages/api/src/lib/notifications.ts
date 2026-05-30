@@ -1,9 +1,9 @@
-﻿import { db } from '../db.js';
+import { db } from '../db.js';
 import { users, notificationInbox } from '@berg/shared';
 import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
-// Per-chat debounce: coalesce rapid messages into one push notification
+// Per-chat debounce: coalesce rapid messages into one push notification AND one inbox write
 type PendingPush = {
   timer: ReturnType<typeof setTimeout>;
   userIds: string[];
@@ -31,6 +31,8 @@ export type PushPayload = {
   body: string;
   data?: Record<string, string>;
 };
+
+export type NotifPref = 'notifyPromptMatches' | 'notifyCircleRequests' | 'notifyMotiveInvites';
 
 type TokenRow = { id: string; token: string };
 
@@ -61,13 +63,19 @@ async function recordInbox(userIds: string[], payload: PushPayload): Promise<voi
 
 /**
  * Send a push notification to a single user AND record it in the inbox.
- * Silently skips push if the user has no registered token, but always writes the inbox row.
+ * Pass `pref` to skip both the inbox write and push if the user has opted out.
  */
-export async function sendPush(userId: string, payload: PushPayload): Promise<void> {
-  // Always record in inbox regardless of token
-  await recordInbox([userId], payload);
+export async function sendPush(
+  userId: string,
+  payload: PushPayload,
+  pref?: NotifPref,
+): Promise<void> {
+  const targetIds = pref ? await filterByPreference([userId], pref) : [userId];
+  if (targetIds.length === 0) return;
 
-  const tokens = await getTokens([userId]);
+  await recordInbox(targetIds, payload);
+
+  const tokens = await getTokens(targetIds);
   if (tokens.length === 0) return;
 
   await pushFetch({
@@ -81,16 +89,21 @@ export async function sendPush(userId: string, payload: PushPayload): Promise<vo
 
 /**
  * Send the same push notification to multiple users AND record in inbox for all.
- * Skips push for users without tokens, but all users get an inbox row.
- * Pass `tag` in data to collapse multiple notifications from the same chat into one on device.
+ * Pass `pref` to filter out users who have opted out before writing any rows.
  */
-export async function sendPushBatch(userIds: string[], payload: PushPayload): Promise<void> {
+export async function sendPushBatch(
+  userIds: string[],
+  payload: PushPayload,
+  pref?: NotifPref,
+): Promise<void> {
   if (userIds.length === 0) return;
 
-  // Always record inbox rows for everyone
-  await recordInbox(userIds, payload);
+  const filtered = pref ? await filterByPreference(userIds, pref) : userIds;
+  if (filtered.length === 0) return;
 
-  const tokens = await getTokens(userIds);
+  await recordInbox(filtered, payload);
+
+  const tokens = await getTokens(filtered);
   if (tokens.length === 0) return;
 
   const collapseKey = payload.data?.chatId;
@@ -100,7 +113,6 @@ export async function sendPushBatch(userIds: string[], payload: PushPayload): Pr
     title: payload.title,
     body: payload.body,
     data: payload.data ?? {},
-    // collapse multiple notifications from the same chat on device
     ...(collapseKey ? { channelId: collapseKey, tag: collapseKey } : {}),
   }));
 
@@ -112,8 +124,8 @@ export async function sendPushBatch(userIds: string[], payload: PushPayload): Pr
 
 /**
  * Debounced push for chat messages: coalesces rapid messages in the same chat
- * into a single push notification sent 3 seconds after the last message.
- * Inbox rows are written immediately (per message); only the device push is debounced.
+ * into a single inbox write AND a single device push, 3 seconds after the last message.
+ * This prevents N inbox rows per burst of N chat messages.
  */
 export async function debouncedChatPush(
   chatId: string,
@@ -122,21 +134,20 @@ export async function debouncedChatPush(
 ): Promise<void> {
   if (userIds.length === 0) return;
 
-  // Always record inbox row immediately so in-app notification appears right away
-  await recordInbox(userIds, payload);
-
   const existing = pendingPushes.get(chatId);
   if (existing) {
     clearTimeout(existing.timer);
-    // Merge userIds (same chat, may have new members)
-    const merged = Array.from(new Set([...existing.userIds, ...userIds]));
-    existing.userIds = merged;
-    existing.payload = payload; // use latest message as preview
+    existing.userIds = Array.from(new Set([...existing.userIds, ...userIds]));
+    existing.payload = payload;
   }
 
   const entry: PendingPush = existing ?? { timer: null as any, userIds, payload };
   entry.timer = setTimeout(async () => {
     pendingPushes.delete(chatId);
+
+    // Write inbox rows once per burst, not once per message
+    await recordInbox(entry.userIds, entry.payload);
+
     const tokens = await getTokens(entry.userIds);
     if (tokens.length === 0) return;
     const collapseKey = entry.payload.data?.chatId ?? chatId;
@@ -163,7 +174,7 @@ export async function debouncedChatPush(
  */
 export async function filterByPreference(
   userIds: string[],
-  pref: 'notifyPromptMatches' | 'notifyCircleRequests' | 'notifyMotiveInvites',
+  pref: NotifPref,
 ): Promise<string[]> {
   if (userIds.length === 0) return [];
   const rows = await db

@@ -32,5 +32,5 @@ export async function handleMotiveReminder(job: { data: MotiveJobData }): Promis
     title: motive.title,
     body: 'Starts in 2 hours -- get ready',
     data: { screen: 'motives', motiveId },
-  });
+  }, 'notifyMotiveInvites');
 }

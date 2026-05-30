@@ -32,5 +32,5 @@ export async function handleMotiveResurface(job: { data: MotiveJobData }): Promi
     title: 'Remember this?',
     body: motive.title,
     data: { screen: 'motives', motiveId, path: 'memory-card' },
-  });
+  }, 'notifyMotiveInvites');
 }

@@ -52,5 +52,5 @@ export async function handleMotiveMemoryPrompt(job: { data: MotiveJobData }): Pr
     title: motive.title,
     body: 'How was it? Add your memories before they fade',
     data: { screen: 'motives', motiveId, path: 'memory' },
-  });
+  }, 'notifyMotiveInvites');
 }
