@@ -88,7 +88,7 @@ export function useChatList() {
   return useQuery({
     queryKey: QK.chatList(),
     queryFn: () => getChats(),
-    staleTime: 30 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
