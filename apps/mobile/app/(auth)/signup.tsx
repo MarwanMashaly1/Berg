@@ -15,6 +15,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { Fonts, C } from '../../constants/theme';
 import { GrainTexture } from '../../components/ui/GrainTexture';
+import { BackButton } from '../../components/ui/BackButton';
 import { authClient } from '../../lib/auth';
 import { captureError } from '../../lib/analytics';
 
@@ -124,9 +125,7 @@ export default function SignUpScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Back — inside safe area, proper spacing from top */}
-          <TouchableOpacity onPress={() => router.back()} style={styles.back} activeOpacity={0.6}>
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
+          <BackButton />
 
           {/* Content block — vertically centered in remaining space */}
           <View style={styles.centerBlock}>
@@ -239,15 +238,6 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 28,
-  },
-  back: {
-    paddingTop: 40,
-    paddingBottom: 8,
-  },
-  backText: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: C.textTertiary,
   },
   // More padding at the bottom shifts content upward, equalising visual space
   centerBlock: {

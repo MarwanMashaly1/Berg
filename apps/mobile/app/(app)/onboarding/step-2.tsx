@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, Fonts } from '../../../constants/theme';
 import { Button } from '../../../components/ui/Button';
+import { BackButton } from '../../../components/ui/BackButton';
 import { OnboardingProgress } from '../../../components/ui/OnboardingProgress';
 import { getVibeTags, getUserVibeTags, postUserVibeTags, patchUser } from '../../../lib/api';
 
@@ -67,9 +68,7 @@ export default function Step2() {
     <View style={{ flex: 1, backgroundColor: C.backgroundWarm }}>
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 28, paddingBottom: 8 }}>
         {isEditing ? (
-          <TouchableOpacity onPress={() => router.back()} style={{ alignSelf: 'flex-start', paddingVertical: 4 }}>
-            <Text style={{ fontFamily: Fonts.bodySemiBold, fontSize: 14, color: C.textSecondary }}>← Back</Text>
-          </TouchableOpacity>
+          <BackButton />
         ) : (
           <OnboardingProgress currentStep={2} />
         )}

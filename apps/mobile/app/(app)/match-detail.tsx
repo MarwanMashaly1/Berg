@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { GestureDetector, Gesture, ScrollView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
+import { BackButton } from '../../components/ui/BackButton';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, Fonts } from '../../constants/theme';
@@ -59,16 +60,16 @@ export default function MatchDetailScreen() {
   const scrollY = useRef(0);
   const dismissed = useRef(false);
 
-  // Pan gesture runs simultaneously with the scroll view so it works on both
-  // iOS (where it supplements rubber-band) and Android (no rubber-band).
-  // activeOffsetY([-15, 10000]) means it only activates for upward swipes —
-  // downward scrolling is left entirely to the scroll view.
-  const swipeUp = Gesture.Pan()
+  // Runs simultaneously with ScrollView so scroll still works.
+  // Activates for both up (< -15) and down (> 15) swipes.
+  // Only dismisses when at the very top of the scroll (scrollY <= 2).
+  const swipeDismiss = Gesture.Pan()
     .simultaneousWithExternalGesture(scrollRef)
-    .activeOffsetY([-15, 10000])
+    .activeOffsetY([-15, 15])
     .runOnJS(true)
     .onEnd((e) => {
-      if (scrollY.current <= 2 && e.translationY < -60 && !dismissed.current) {
+      if (dismissed.current || scrollY.current > 2) return;
+      if (Math.abs(e.translationY) > 60) {
         dismissed.current = true;
         router.back();
       }
@@ -86,13 +87,11 @@ export default function MatchDetailScreen() {
   }
 
   return (
-    <GestureDetector gesture={swipeUp}>
+    <GestureDetector gesture={swipeDismiss}>
       <Animated.View style={[styles.root, { paddingTop: insets.top }]}>
         {/* Nav */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backChevron}>{'<'}</Text>
-          </TouchableOpacity>
+          <BackButton />
           <Text style={styles.navTitle}>You agree</Text>
           <View style={styles.navRight} />
         </View>
@@ -171,12 +170,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  backBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: C.surfaceAlt,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backChevron: { fontSize: 18, color: C.text, fontFamily: Fonts.body, lineHeight: 22 },
   navTitle: {
     flex: 1, textAlign: 'center',
     fontFamily: Fonts.bodySemiBold, fontSize: 15, color: C.text,

@@ -10,6 +10,7 @@ import { getSetCookie } from '@better-auth/expo/client';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, Fonts } from '../../constants/theme';
 import { authClient } from '../../lib/auth';
+import { BackButton } from '../../components/ui/BackButton';
 import { identifyUser, captureError } from '../../lib/analytics';
 import { Routes } from '../../lib/routes';
 import { Config } from '../../lib/config';
@@ -146,13 +147,7 @@ export default function MagicLinkSentScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Back / close */}
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.replace('/(auth)/welcome')}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
+        <BackButton onPress={() => router.replace('/(auth)/welcome')} />
 
         {/* Icon */}
         <View style={styles.iconWrap}>
@@ -235,15 +230,6 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 28,
-  },
-  backBtn: {
-    marginBottom: 32,
-    alignSelf: 'flex-start',
-  },
-  backText: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: C.textTertiary,
   },
 
   // Icon — envelope drawn with views

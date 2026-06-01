@@ -26,19 +26,21 @@ import {
   markAllRead,
   markNotificationRead,
   getOpenMatches,
+  getDiscoveryCircles,
+  getDiscoveryPeople,
   dismissMatch,
   TodayPromptResponse,
   MatchResult,
   OpenMatch,
   PulseCard,
   NotificationItem,
+  CircleSuggestion,
+  PersonSuggestion,
 } from "../../../../lib/api";
 import { PromptCard } from "../../../../components/features/discovery/PromptCard";
 import { MatchReveal } from "../../../../components/features/discovery/MatchReveal";
-// [align-5] PeopleSection hidden — stranger discovery is secondary. See PRODUCT_NORTH_STAR.md. Component lives in explore.tsx.
-// import { PeopleSection } from "../../../../components/features/discovery/PeopleSection";
-// [align-5] CirclesSection hidden — stranger discovery is secondary. See PRODUCT_NORTH_STAR.md. Component lives in explore.tsx.
-// import { CirclesSection } from "../../../../components/features/discovery/CirclesSection";
+import { PeopleSection } from "../../../../components/features/discovery/PeopleSection";
+import { CirclesSection } from "../../../../components/features/discovery/CirclesSection";
 import { CirclePulse } from "../../../../components/features/discovery/CirclePulse";
 import { log } from "../../../../lib/logger";
 
@@ -198,7 +200,10 @@ export default function DiscoveryScreen() {
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [showReveal, setShowReveal] = useState(false);
 
-  // [align-5] people/circles state removed — PeopleSection and CirclesSection moved to explore.tsx
+  const [circles, setCircles] = useState<CircleSuggestion[]>([]);
+  const [circlesLoading, setCirclesLoading] = useState(true);
+  const [people, setPeople] = useState<PersonSuggestion[]>([]);
+  const [peopleLoading, setPeopleLoading] = useState(true);
 
   const [pulseCards, setPulseCards] = useState<PulseCard[]>([]);
   const [openMatches, setOpenMatches] = useState<OpenMatch[]>([]);
@@ -210,11 +215,13 @@ export default function DiscoveryScreen() {
   const [showInbox, setShowInbox] = useState(false);
 
   const loadAll = useCallback(async () => {
-    const [p, pu, uc, om] = await Promise.allSettled([
+    const [p, pu, uc, om, ci, pe] = await Promise.allSettled([
       getTodayPrompt(),
       getDiscoveryPulse(),
       getUnreadCount(),
       getOpenMatches(),
+      getDiscoveryCircles(),
+      getDiscoveryPeople(),
     ]);
     if (p.status === "fulfilled") {
       setPromptData(p.value);
@@ -225,6 +232,10 @@ export default function DiscoveryScreen() {
     if (uc.status === "fulfilled") setUnreadCount(uc.value.count);
     // [align-2] Cap at 5 to avoid overwhelming the homepage
     if (om.status === "fulfilled") setOpenMatches(om.value.matches.slice(0, 5));
+    setCircles(ci.status === "fulfilled" ? ci.value.circles : []);
+    setCirclesLoading(false);
+    setPeople(pe.status === "fulfilled" ? pe.value.people : []);
+    setPeopleLoading(false);
   }, []);
 
   useEffect(() => {
@@ -282,9 +293,18 @@ export default function DiscoveryScreen() {
   // Open inbox — fetch fresh list
   async function handleOpenInbox() {
     setShowInbox(true);
+    setUnreadCount(0);
     try {
-      const result = await getNotifications();
-      setNotifications(result.notifications);
+      const [result] = await Promise.all([
+        getNotifications(),
+        markAllRead().catch(() => {}),
+      ]);
+      setNotifications(
+        result.notifications.map((n) => ({
+          ...n,
+          readAt: n.readAt ?? new Date().toISOString(),
+        })),
+      );
     } catch (e) {
       console.error("Failed to load notifications:", e);
     }
@@ -462,33 +482,16 @@ export default function DiscoveryScreen() {
           </View>
         )}
 
-        {/* [align-5] CirclePulse moved up into the circle activity band (above Explore entry) */}
         {pulseCards.length > 0 && (
           <>
-            <View style={styles.sectionDivider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerLabel}>ACTIVITY</Text>
-              <View style={styles.dividerLine} />
-            </View>
+            <Text style={styles.sectionHeading}>Activity</Text>
             <CirclePulse cards={pulseCards} onAction={handlePulseAction} />
           </>
         )}
 
-        {/* ── Stranger discovery hidden from homepage ───────────────────────── */}
-        {/* [align-5] PeopleSection hidden — stranger discovery is secondary. See PRODUCT_NORTH_STAR.md. Component lives in explore.tsx. */}
-        {/* <PeopleSection people={people} loading={peopleLoading} /> */}
+        <CirclesSection circles={circles} loading={circlesLoading} />
 
-        {/* [align-5] CirclesSection hidden — stranger discovery is secondary. See PRODUCT_NORTH_STAR.md. Component lives in explore.tsx. */}
-        {/* <CirclesSection circles={circles} loading={circlesLoading} /> */}
-
-        {/* ── Explore entry point ───────────────────────────────────────────── */}
-        <TouchableOpacity
-          style={styles.exploreRow}
-          onPress={() => router.push(Routes.explore)}
-          activeOpacity={0.75}>
-          <Text style={styles.exploreRowText}>Find people you might know</Text>
-          <MaterialIcons name="chevron-right" size={20} color={C.textSecondary} />
-        </TouchableOpacity>
+        <PeopleSection people={people} loading={peopleLoading} />
       </ScrollView>
 
       <MatchReveal
@@ -606,20 +609,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  sectionDivider: {
-    flexDirection: "row",
-    alignItems: "center",
+  sectionHeading: {
+    fontFamily: Fonts.headingRegular,
+    fontSize: 17,
+    color: C.text,
+    fontStyle: 'italic',
+    letterSpacing: -0.2,
     marginHorizontal: 16,
     marginTop: 28,
     marginBottom: 8,
-    gap: 10,
-  },
-  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
-  dividerLabel: {
-    fontSize: 10,
-    fontFamily: Fonts.bodySemiBold,
-    color: C.textTertiary,
-    letterSpacing: 1.2,
   },
 
   // ── Inbox sheet ──
@@ -756,27 +754,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.textSecondary,
     textAlign: "center",
-  },
-
-  // [align-5] Explore entry row
-  exploreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: 16,
-    marginTop: 20,
-    marginBottom: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 15,
-    backgroundColor: C.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  exploreRowText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 14,
-    color: C.text,
   },
 
   // [align-2] Open matches band

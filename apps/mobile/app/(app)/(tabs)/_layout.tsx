@@ -98,7 +98,6 @@ export default function TabsLayout() {
         name="discovery"
         options={{
           title: 'Discover',
-          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="sparkles" active={focused} />
           ),
@@ -108,7 +107,6 @@ export default function TabsLayout() {
         name="motives"
         options={{
           title: 'Motives',
-          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="calendar" active={focused} />
           ),
@@ -130,7 +128,6 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          unmountOnBlur: true,
           tabBarIcon: ({ focused }) => (
             <TabIcon name="person.circle" active={focused} />
           ),

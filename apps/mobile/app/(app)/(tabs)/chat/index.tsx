@@ -102,6 +102,12 @@ export default function ChatListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function debouncedLoad() {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => load(true), 2000);
+  }
 
   const load = useCallback(async (silent = false) => {
     try {
@@ -121,11 +127,9 @@ export default function ChatListScreen() {
     setRefreshing(false);
   }
 
-  // Reload on focus + refresh timestamps every 60s while screen is active
+  // Reload on focus — realtime handles live updates, no polling needed
   useFocusEffect(useCallback(() => {
-    load(true); // silent on background focus
-    const timer = setInterval(() => load(true), 60_000);
-    return () => clearInterval(timer);
+    load(true);
   }, [load]));
 
   useEffect(() => {
@@ -149,16 +153,15 @@ export default function ChatListScreen() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         () => {
-          // Re-fetch the list to get updated lastMessage + unreadCount
-          load();
+          // Debounce: rapid message bursts collapse into one reload
+          debouncedLoad();
         },
       )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chats' },
         () => {
-          // A new chat was created (e.g. motive confirmed) — refresh list
-          load();
+          debouncedLoad();
         },
       )
       .subscribe();
@@ -168,6 +171,7 @@ export default function ChatListScreen() {
     return () => {
       supabase.removeChannel(channel);
       channelRef.current = null;
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
     };
   }, [myId, load]);
 

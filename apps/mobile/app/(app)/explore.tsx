@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { BackButton } from '../../components/ui/BackButton';
 import { C, Fonts } from '../../constants/theme';
 import { getDiscoveryPeople, getDiscoveryCircles, PersonSuggestion, CircleSuggestion } from '../../lib/api';
 import { PeopleSection } from '../../components/features/discovery/PeopleSection';
@@ -38,12 +38,7 @@ export default function ExploreScreen() {
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialIcons name="chevron-left" size={22} color={C.text} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.title}>Explore</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -73,12 +68,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.border,
     backgroundColor: C.background,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: C.surface,
-    borderWidth: 1, borderColor: C.border,
-    alignItems: 'center', justifyContent: 'center',
   },
   title: {
     fontFamily: Fonts.heading,
