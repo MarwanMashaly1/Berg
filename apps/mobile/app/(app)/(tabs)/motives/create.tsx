@@ -31,6 +31,7 @@ import { PlacePicker } from '../../../../components/motives/create/PlacePicker';
 import { DatePickerModal, formatDateFull } from '../../../../components/motives/create/DatePickerModal';
 import { Step2People } from '../../../../components/motives/create/Step2People';
 import { Step4Review } from '../../../../components/motives/create/Step4Review';
+import { BackButton } from '../../../../components/ui/BackButton';
 
 // ─── Category helper ──────────────────────────────────────────────────────────
 type CatKey = CategoryKey;
@@ -453,9 +454,7 @@ export default function CreateMotiveScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Nav bar */}
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => (step > 1 ? setStep(s => s - 1) : router.back())} style={styles.navBack}>
-          <Text style={styles.navBackChevron}>{'<'}</Text>
-        </TouchableOpacity>
+        <BackButton onPress={() => step > 1 ? setStep(s => s - 1) : router.back()} />
         <Text style={styles.navStep}>Step {step} of {TOTAL}</Text>
         <View style={styles.navRight} />
       </View>
@@ -528,20 +527,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-  },
-  navBack: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: C.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navBackChevron: {
-    fontSize: 18,
-    color: C.text,
-    fontFamily: Fonts.body,
-    lineHeight: 22,
   },
   navStep: {
     flex: 1,

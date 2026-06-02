@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { BackButton } from '../../../components/ui/BackButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, Fonts } from '../../../constants/theme';
 import { Avatar } from '../../../components/ui/Avatar';
@@ -111,9 +111,7 @@ export default function PublicUserProfile() {
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialIcons name="arrow-back-ios" size={16} color="rgba(242,232,220,0.8)" />
-        </TouchableOpacity>
+        <BackButton variant="dark" />
         <View style={{ flex: 1 }} />
       </View>
 
@@ -212,12 +210,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 0,
     paddingTop: 8,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center', justifyContent: 'center',
   },
 
   // Hero

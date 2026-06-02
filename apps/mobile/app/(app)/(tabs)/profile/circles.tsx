@@ -4,6 +4,7 @@ import {
   StyleSheet, Modal, RefreshControl, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { BackButton } from '../../../../components/ui/BackButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, Fonts } from '../../../../constants/theme';
 import { Routes } from '../../../../lib/routes';
@@ -57,13 +58,7 @@ export default function CirclesScreen() {
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <View style={styles.chevron} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.title}>Circles</Text>
         {/* Create circle button */}
         <TouchableOpacity
@@ -226,20 +221,6 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     paddingTop: 8,
     gap: 12,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: C.surface,
-    borderWidth: 1, borderColor: C.border,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  chevron: {
-    width: 9, height: 9,
-    borderLeftWidth: 2, borderBottomWidth: 2,
-    borderColor: C.textSecondary,
-    transform: [{ rotate: '45deg' }],
-    marginLeft: 3,
   },
   title: {
     fontFamily: Fonts.heading,

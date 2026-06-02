@@ -16,6 +16,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BackButton } from '../../../../../components/ui/BackButton';
 import { C } from '../../../../../constants/theme';
 import { apiFetch, getProfileConnections } from '../../../../../lib/api';
 
@@ -294,9 +295,7 @@ export default function EditMotiveScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backChevron}>{'<'}</Text>
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.headerTitle}>Edit Motive</Text>
         <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.saveBtn}>
           {saving
@@ -444,8 +443,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  backBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  backChevron: { fontSize: 16, color: C.text, fontFamily: 'DMSans_400Regular', lineHeight: 20 },
   headerTitle: { fontFamily: 'DMSans_600SemiBold', fontSize: 15, color: C.text },
   saveBtn: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: C.primary, borderRadius: 10 },
   saveBtnText: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: '#FFF' },

@@ -4,6 +4,7 @@ import {
   ScrollView, Switch, Share, KeyboardAvoidingView, Platform, Image, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
+import { BackButton } from '../../../../components/ui/BackButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -110,9 +111,7 @@ export default function CreateCircleScreen() {
       <View style={[styles.safe, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => (step > 0 && step < 3 ? setStep(step - 1) : router.back())}>
-            <Text style={styles.backBtn}>{step === 3 ? '✕ Close' : '← Back'}</Text>
-          </TouchableOpacity>
+          <BackButton onPress={() => (step > 0 && step < 3 ? setStep(step - 1) : router.back())} />
           <Text style={styles.title}>Create a circle</Text>
           <View style={{ width: 60 }} />
         </View>
@@ -323,7 +322,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 18, paddingBottom: 8,
   },
-  backBtn: { fontFamily: Fonts.body, fontSize: 13, color: C.textSecondary, width: 60 },
   title: { fontFamily: Fonts.heading, fontSize: 16, color: C.text },
   stepRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, paddingHorizontal: 18, marginBottom: 8 },
   stepItem: { alignItems: 'center', gap: 3 },

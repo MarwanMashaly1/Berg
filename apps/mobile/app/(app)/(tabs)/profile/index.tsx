@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { authClient } from '../../../../lib/auth';
@@ -45,7 +44,7 @@ export default function ProfileScreen() {
   const { data: inviteLinkData } = useQuery({
     queryKey: ['invite-link'], queryFn: () => getInviteLink(), enabled, staleTime: Infinity,
   });
-  const { data: profileDataRes, isLoading: profileLoading, refetch: refetchProfile } = useQuery({
+  const { data: profileDataRes, isLoading: profileLoading } = useQuery({
     queryKey: QK.profile(), queryFn: () => getUserMe(), enabled, staleTime: 2 * 60 * 1000,
   });
 
@@ -62,14 +61,7 @@ export default function ProfileScreen() {
     if (profileData?.availabilityStatus) setAvailability(profileData.availabilityStatus);
   }, [profileData?.availabilityStatus]);
 
-  // Reload when tab comes into focus (catches circle joins, connection accepts, etc.)
-  useFocusEffect(useCallback(() => {
-    if (!currentUser) return;
-    refetchStats();
-    refetchConns();
-    refetchCircles();
-    refetchProfile();
-  }, [currentUser, refetchStats, refetchConns, refetchCircles, refetchProfile]));
+  // Data freshness handled by React Query staleTime — no manual focus-refetch needed.
 
   async function handleRefresh() {
     await Promise.all([refetchStats(), refetchConns(), refetchCircles(), refetchProfile()]);

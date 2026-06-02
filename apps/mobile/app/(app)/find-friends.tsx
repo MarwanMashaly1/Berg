@@ -15,6 +15,7 @@ try {
   // not available in this build — contact sync will be skipped
 }
 import { Avatar } from '../../components/ui/Avatar';
+import { BackButton } from '../../components/ui/BackButton';
 import { searchUsers, requestConnection, syncContacts, type UserSearchResult } from '../../lib/api';
 
 function normalizePhone(raw: string): string | null {
@@ -155,9 +156,7 @@ export default function FindFriendsScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.back}>← Back</Text>
-          </TouchableOpacity>
+          <BackButton />
           <Text style={styles.title}>Find friends</Text>
         </View>
         <View style={styles.searchWrap}>
@@ -194,9 +193,7 @@ export default function FindFriendsScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.back}>← Back</Text>
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.title}>Find friends</Text>
       </View>
 
@@ -264,7 +261,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 4,
   },
-  back: { fontFamily: Fonts.body, fontSize: 14, color: C.textTertiary, marginBottom: 8 },
   title: { fontFamily: Fonts.heading, fontSize: 28, color: C.text, letterSpacing: -0.5 },
 
   searchWrap: {

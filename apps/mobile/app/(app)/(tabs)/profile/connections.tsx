@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
+import { BackButton } from '../../../../components/ui/BackButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, Fonts } from '../../../../constants/theme';
 import { Routes } from '../../../../lib/routes';
@@ -108,9 +109,7 @@ export default function ConnectionsScreen() {
     <View style={styles.safe}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialIcons name="arrow-back-ios" size={16} color={C.textSecondary} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.title}>Connections</Text>
         <TouchableOpacity onPress={() => router.push(Routes.findFriends)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.findBtn}>Find friends</Text>
@@ -302,16 +301,6 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 18,
     paddingBottom: 14,
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   title: {
     fontFamily: Fonts.heading,

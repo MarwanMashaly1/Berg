@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   FlatList,
   Pressable,
@@ -338,12 +337,7 @@ export default function MotivesScreen() {
       </View>
 
       {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-        style={styles.filterScroll}
-      >
+      <View style={styles.filterRow}>
         {FILTERS.map(f => (
           <TouchableOpacity
             key={f.key}
@@ -355,7 +349,7 @@ export default function MotivesScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
 
       {/* Content */}
       {loading ? (
@@ -445,14 +439,12 @@ const styles = StyleSheet.create({
     color: C.text,
     padding: 0,
   },
-  filterScroll: {
-    flexGrow: 0,
-  },
   filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 20,
     paddingBottom: 12,
     gap: 8,
-    flexDirection: 'row',
   },
   chip: {
     backgroundColor: C.surface,
